@@ -29,15 +29,46 @@
     });
   }
 
-  // 测试 Telegram 推送
-  $("#btn-tg-test")?.addEventListener("click", async (e) => {
-    const b = e.currentTarget; b.disabled = true; b.textContent = "发送中…";
-    const r = await api("/api/notify/test");
+  // Telegram 诊断 / 测试
+  function tgResult(text, ok) {
     const box = $("#tg-test-msg");
-    if (box) box.textContent = r.message || "";
-    b.textContent = r.ok ? "已发送 ✓" : "测试 Telegram 推送";
-    b.disabled = false;
+    if (!box) return;
+    box.textContent = (ok ? "✅ " : "❌ ") + text;
+    box.style.color = ok ? "#34d399" : "#f87171";
+  }
+  async function tgCall(url, btn, busyText, okText) {
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = busyText;
+    try {
+      const resp = await fetch(url, { method: "POST" });
+      const r = await resp.json();
+      tgResult(r.message || ("HTTP " + resp.status), r.ok);
+      btn.textContent = r.ok ? okText : old;
+    } catch (err) {
+      tgResult("请求失败：" + err.message + "（后端未响应？）", false);
+      btn.textContent = old;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  $("#btn-tg-check")?.addEventListener("click", (e) => tgCall("/api/telegram/check", e.currentTarget, "诊断中…", "连接正常 ✓"));
+
+  // TMDB 诊断
+  $("#btn-tmdb-check")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget, old = btn.textContent;
+    const box = $("#tmdb-check-msg");
+    btn.disabled = true; btn.textContent = "诊断中…";
+    try {
+      const resp = await fetch("/api/tmdb/check", { method: "POST" });
+      const r = await resp.json();
+      if (box) { box.textContent = (r.ok ? "✅ " : "❌ ") + (r.message || ""); box.style.color = r.ok ? "#34d399" : "#f87171"; }
+      btn.textContent = r.ok ? "连接正常 ✓" : old;
+    } catch (err) {
+      if (box) { box.textContent = "❌ 请求失败：" + err.message; box.style.color = "#f87171"; }
+      btn.textContent = old;
+    } finally { btn.disabled = false; }
   });
+  $("#btn-tg-test")?.addEventListener("click", (e) => tgCall("/api/notify/test", e.currentTarget, "发送中…", "已发送 ✓"));
 
   // 手动签到
   $("#btn-checkin")?.addEventListener("click", async (e) => {

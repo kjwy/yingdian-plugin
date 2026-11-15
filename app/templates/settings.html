@@ -5,7 +5,7 @@
 <div class="panel">
   <div class="head"><h3>影癫 OpenAPI</h3></div>
   <label>服务地址<input class="inp" name="dian_base_url" value="{{ cfg.dian_base_url }}"></label>
-  <label>OpenAPI Key（当前：{{ cfg.dian_api_key_masked or '未填写' }}）<input class="inp" name="dian_api_key" placeholder="dys_xxxx（留空或保持 *** 不修改）"></label>
+  <label>OpenAPI Key（当前：{{ cfg.dian_api_key_masked or '未填写' }}）<input class="inp" name="dian_api_key" placeholder="留空 = 不修改"></label>
   <label class="chk"><input type="checkbox" name="mock_mode" {{ "checked" if cfg.mock_mode }}> 模拟模式（不调用真实接口，用于联调）</label>
 </div>
 
@@ -52,19 +52,33 @@
 
 <div class="panel">
   <div class="head"><h3>Telegram 推送（Symedia 115助手）</h3></div>
-  <label>Bot Token（当前：{{ cfg.tg_bot_token_masked or '未填写' }}）<input class="inp" name="tg_bot_token" placeholder="123456:ABC-xxx"></label>
+  <label>Bot Token（当前：{{ cfg.tg_bot_token_masked or '未填写' }}）<input class="inp" name="tg_bot_token" placeholder="留空 = 不修改"></label>
   <label>目标群 Chat ID<input class="inp" name="tg_chat_id" value="{{ cfg.tg_chat_id }}" placeholder="-100xxxxxxxxxx"></label>
   <label>消息模板<input class="inp" name="tg_template" value="{{ cfg.tg_template }}"></label>
+  <label>HTTP 代理（可选，NAS 直连不了 Telegram 时填，如 http://192.168.1.2:7890）<input class="inp" name="tg_proxy" value="{{ cfg.tg_proxy }}" placeholder="留空＝直连"></label>
   <div class="row" style="align-items:center">
-    <button type="button" class="btn" id="btn-tg-test">测试 Telegram 推送</button>
+    <button type="button" class="btn" id="btn-tg-check">诊断连接</button>
+    <button type="button" class="btn primary" id="btn-tg-test">测试推送</button>
     <span id="tg-test-msg" class="hint"></span>
   </div>
   <div class="hint">做法：@BotFather 建一个机器人拿 token → 把这个机器人 和 Symedia 115助手都拉进同一个 TG 群 → 群里给它发条消息 → 用 getUpdates 查群 chat id（-100 开头）。插件往群里发 115 链接，Symedia 助手收到就转存。</div>
 </div>
 
 <div class="panel">
+  <div class="head"><h3>TMDB（片名搜索用，可选）</h3></div>
+  <label>TMDB API Key（当前：{{ cfg.tmdb_api_key_masked or '未填写' }}）<input class="inp" name="tmdb_api_key" placeholder="留空 = 不修改"></label>
+  <label>TMDB 代理（留空则沿用上面的 Telegram 代理）<input class="inp" name="tmdb_proxy" value="{{ cfg.tmdb_proxy }}" placeholder="如 http://192.168.1.2:7890"></label>
+  <label>API 域名<input class="inp" name="tmdb_api_base" value="{{ cfg.tmdb_api_base }}" placeholder="https://api.themoviedb.org/3"></label>
+  <label>图片域名<input class="inp" name="tmdb_image_base" value="{{ cfg.tmdb_image_base }}" placeholder="https://image.tmdb.org/t/p"></label>
+  <div class="row" style="align-items:center">
+    <button type="button" class="btn" id="btn-tmdb-check">诊断 TMDB</button>
+    <span id="tmdb-check-msg" class="hint"></span>
+  </div>
+  <div class="hint">国内直连 TMDB 常不通：可填代理，或把 API 域名换成镜像（如 https://api.tmdb.org/3）。</div>
+</div>
+
+<div class="panel">
   <div class="head"><h3>其它</h3></div>
-  <label>TMDB API Key（可选，用于片名搜索）<input class="inp" name="tmdb_api_key" placeholder="{{ cfg.tmdb_api_key_masked or '未填写' }}"></label>
   <label>时区<input class="inp" name="timezone" value="{{ cfg.timezone }}"></label>
 </div>
 

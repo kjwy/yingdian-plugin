@@ -42,10 +42,14 @@ DEFAULTS: dict = {
     },
     # Telegram 推送（Symedia 115助手 所在群）
     "tg_bot_token": "",
+    "tg_proxy": "",   # 可选：http://127.0.0.1:7890 这类 HTTP 代理
     "tg_chat_id": "",
     "tg_template": "【影癫插件】{title}\n{link}",
     # TMDB（用于片名 → tmdb_id）
     "tmdb_api_key": "",
+    "tmdb_proxy": "",       # 可选：TMDB 代理（留空则沿用 Telegram 代理）
+    "tmdb_api_base": "https://api.themoviedb.org/3",
+    "tmdb_image_base": "https://image.tmdb.org/t/p",
     "tmdb_language": "zh-CN",
     # 其它
     "mock_mode": os.getenv("YDP_MOCK", "0") == "1",
@@ -78,4 +82,5 @@ def mask_secret(value: str) -> str:
         return ""
     if len(value) <= 8:
         return value[:2] + "***"
-    return value[:8] + "***"
+    return value[:8] + "***"
+

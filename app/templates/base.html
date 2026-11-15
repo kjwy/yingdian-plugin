@@ -2,15 +2,26 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- viewport-fit=cover：让页面铺满灵动岛/刘海区域，配合 safe-area-inset 使用 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}影癫插件{% endblock %}</title>
-<link rel="stylesheet" href="/static/style.css">
+<meta name="theme-color" content="#0b0e14">
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="影癫插件">
+<meta name="application-name" content="影癫插件">
+<link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
 <header class="top">
   <div class="inner">
     <div class="brand">影癫<em>插件</em> <span class="ver">for Symedia</span></div>
-    <nav>
+    <nav class="nav">
       <a href="/" class="{{ 'on' if request.url.path == '/' }}">仪表盘</a>
       <a href="/subs" class="{{ 'on' if request.url.path == '/subs' }}">订阅</a>
       <a href="/logs" class="{{ 'on' if request.url.path == '/logs' }}">日志</a>
@@ -21,10 +32,20 @@
     </div>
   </div>
 </header>
+
 <main class="wrap">
 {% block content %}{% endblock %}
+<footer class="foot">影癫插件 v0.1.3 · 仅供个人媒体自动化使用</footer>
 </main>
-<footer class="foot">影癫插件 v0.1.0 · 仅供个人媒体自动化使用</footer>
-<script src="/static/app.js"></script>
+
+<!-- 手机端底部导航（桌面端隐藏） -->
+<nav class="tabbar">
+  <a href="/" class="{{ 'on' if request.url.path == '/' }}"><span class="ico">📊</span>仪表盘</a>
+  <a href="/subs" class="{{ 'on' if request.url.path == '/subs' }}"><span class="ico">🎯</span>订阅</a>
+  <a href="/logs" class="{{ 'on' if request.url.path == '/logs' }}"><span class="ico">📜</span>日志</a>
+  <a href="/settings" class="{{ 'on' if request.url.path == '/settings' }}"><span class="ico">⚙️</span>设置</a>
+</nav>
+
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>
