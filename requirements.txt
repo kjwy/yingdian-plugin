@@ -1,0 +1,7 @@
+fastapi>=0.111,<1
+uvicorn[standard]>=0.30,<1
+jinja2>=3.1,<4
+httpx>=0.27,<1
+apscheduler>=3.10,<4
+# 影癫官方 OpenAPI v2 SDK（审批通过后从门户下载，本地安装）
+# dian115_openapi  ← 由申请人自行放入并安装
