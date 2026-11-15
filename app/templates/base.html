@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}影癫插件{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="inner">
+    <div class="brand">影癫<em>插件</em> <span class="ver">for Symedia</span></div>
+    <nav>
+      <a href="/" class="{{ 'on' if request.url.path == '/' }}">仪表盘</a>
+      <a href="/subs" class="{{ 'on' if request.url.path == '/subs' }}">订阅</a>
+      <a href="/logs" class="{{ 'on' if request.url.path == '/logs' }}">日志</a>
+      <a href="/settings" class="{{ 'on' if request.url.path == '/settings' }}">设置</a>
+    </nav>
+    <div class="stat">
+      {% if status.ready %}<span class="dot ok"></span>{{ status.mode }}{% else %}<span class="dot bad"></span>未就绪{% endif %}
+    </div>
+  </div>
+</header>
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+<footer class="foot">影癫插件 v0.1.0 · 仅供个人媒体自动化使用</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

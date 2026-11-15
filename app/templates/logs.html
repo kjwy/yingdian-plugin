@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+  <div class="head"><h3>签到记录</h3></div>
+  {% if checkins %}
+  <table><tr><th>日期</th><th>模式</th><th>结果</th><th>积分</th><th>时间</th></tr>
+  {% for c in checkins %}
+  <tr><td>{{ c.day }}</td><td>{{ c.mode }}</td><td class="{{ 'ok' if c.ok else 'bad' }}">{{ c.message }}</td>
+  <td>{{ c.points_before or '-' }} → {{ c.points_after or '-' }}</td><td>{{ c.created_at }}</td></tr>
+  {% endfor %}</table>
+  {% else %}<div class="empty">暂无</div>{% endif %}
+</div>
+
+<div class="panel">
+  <div class="head"><h3>解锁记录</h3></div>
+  {% if unlocks %}
+  <table><tr><th>时间</th><th>标题</th><th>类型</th><th>规格</th><th>大小</th><th>积分</th><th>结果</th><th>链接</th></tr>
+  {% for u in unlocks %}
+  <tr>
+    <td>{{ u.created_at }}</td><td>{{ u.title }}</td><td>{{ u.media_type }}</td>
+    <td class="tag">{{ u.tag }}</td><td>{{ u.size }}</td><td>{{ u.cost }}</td>
+    <td class="{{ 'ok' if u.ok else 'bad' }}">{{ "成功" if u.ok else u.message }}</td>
+    <td class="tag">{{ u.link or "-" }}</td>
+  </tr>
+  {% endfor %}</table>
+  {% else %}<div class="empty">暂无</div>{% endif %}
+</div>
+{% endblock %}

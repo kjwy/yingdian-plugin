@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid3">
+  <div class="card">
+    <div class="k">OpenAPI 状态</div>
+    <div class="v">{{ status.message }}</div>
+    <div class="sub">模式：{{ status.mode }}</div>
+  </div>
+  <div class="card">
+    <div class="k">今日签到</div>
+    <div class="v">{{ "已完成" if not checkin_ready else "未签到" }}</div>
+    {% if checkin_ready %}<button class="btn primary" id="btn-checkin">立即签到</button>{% endif %}
+    <div class="sub" id="checkin-msg"></div>
+  </div>
+  <div class="card">
+    <div class="k">订阅数</div>
+    <div class="v">{{ subs|length }}</div>
+    <a class="btn" href="/subs">管理订阅</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="head"><h3>最近签到</h3></div>
+  {% if checkins %}
+  <table><tr><th>日期</th><th>模式</th><th>结果</th><th>积分</th><th>时间</th></tr>
+  {% for c in checkins %}
+  <tr><td>{{ c.day }}</td><td>{{ c.mode }}</td><td class="{{ 'ok' if c.ok else 'bad' }}">{{ c.message }}</td>
+  <td>{{ c.points_before or '-' }} → {{ c.points_after or '-' }}</td><td>{{ c.created_at }}</td></tr>
+  {% endfor %}
+  </table>
+  {% else %}<div class="empty">暂无签到记录</div>{% endif %}
+</div>
+
+<div class="panel">
+  <div class="head"><h3>最近解锁 / 推送</h3><button class="btn" id="btn-subs-run">执行订阅搜索</button></div>
+  {% if unlocks %}
+  <table><tr><th>时间</th><th>标题</th><th>规格</th><th>积分</th><th>结果</th></tr>
+  {% for u in unlocks %}
+  <tr><td>{{ u.created_at }}</td><td>{{ u.title }}</td><td class="tag">{{ u.tag }}</td><td>{{ u.cost }}</td>
+  <td class="{{ 'ok' if u.ok else 'bad' }}">{{ "已推送" if u.ok else u.message }}</td></tr>
+  {% endfor %}
+  </table>
+  {% else %}<div class="empty">暂无解锁记录</div>{% endif %}
+</div>
+
+<div class="panel">
+  <div class="head"><h3>手动搜索</h3><span class="hint">输入 TMDB ID 查询影癫资源（OpenAPI 不做关键词搜索）</span></div>
+  <div class="row">
+    <input id="q-tmdb" placeholder="TMDB ID，如 438631" class="inp">
+    <select id="q-type" class="inp"><option value="movie">电影</option><option value="tv">剧集</option></select>
+    <input id="q-season" placeholder="季（剧集可选）" class="inp">
+    <button class="btn primary" id="btn-search">查询资源</button>
+  </div>
+  <div id="search-result" class="results"></div>
+</div>
+{% endblock %}

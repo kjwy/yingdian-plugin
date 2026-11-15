@@ -1,0 +1,14 @@
+services:
+  yingdian-plugin:
+    build: .
+    image: yingdian-plugin:latest
+    container_name: yingdian-plugin
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+      # 首次可先用模拟模式跑通界面，填好 Key + 安装 SDK 后改成 0
+      - YDP_MOCK=1

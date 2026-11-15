@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+  <div class="head"><h3>添加订阅</h3><span class="hint">先用片名搜 TMDB，或直接填 TMDB ID</span></div>
+  <div class="row">
+    <input id="tmdb-q" class="inp" placeholder="片名，如：沙丘">
+    <select id="tmdb-type" class="inp"><option value="movie">电影</option><option value="tv">剧集</option></select>
+    <button class="btn primary" id="btn-tmdb">搜索 TMDB</button>
+  </div>
+  <div id="tmdb-results" class="results"></div>
+
+  <hr>
+  <form method="post" action="/subs/add" class="row">
+    <input class="inp" name="title" placeholder="标题（可选）">
+    <input class="inp" name="tmdb_id" placeholder="TMDB ID" required>
+    <select class="inp" name="media_type"><option value="movie">电影</option><option value="tv">剧集</option></select>
+    <input class="inp" name="season" type="number" value="0" placeholder="季">
+    <button class="btn primary">添加订阅</button>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="head"><h3>订阅列表（{{ subs|length }}）</h3><button class="btn" id="btn-subs-run2">立即执行搜索</button></div>
+  {% if subs %}
+  <table>
+    <tr><th>标题</th><th>TMDB</th><th>类型</th><th>季</th><th>状态</th><th>上次 share</th><th>操作</th></tr>
+    {% for s in subs %}
+    <tr>
+      <td>{{ s.title }}</td><td>{{ s.tmdb_id }}</td>
+      <td>{{ "剧集" if s.media_type == "tv" else "电影" }}</td>
+      <td>{{ s.season }}</td>
+      <td class="{{ 'ok' if s.enabled else 'bad' }}">{{ "启用" if s.enabled else "暂停" }}</td>
+      <td class="tag">{{ s.last_share_id or "-" }}</td>
+      <td class="ops">
+        <form method="post" action="/subs/{{ s.id }}/toggle"><input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}"><button class="btn sm">{{ "暂停" if s.enabled else "启用" }}</button></form>
+        <form method="post" action="/subs/{{ s.id }}/delete"><button class="btn sm danger">删除</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<div class="empty">还没有订阅，先用上面搜索添加</div>{% endif %}
+</div>
+{% endblock %}

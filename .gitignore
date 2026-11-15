@@ -4,4 +4,5 @@ __pycache__/
 data/
 config.json
 .env
-*.db
+*.db
+sdk/*.whl
