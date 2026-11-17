@@ -83,8 +83,7 @@ def _filter_candidates(
         out.append(it)
     if for_sub and cloud_type and cloud_type != "all":
         preferred = [it for it in out if (it.get("share_kind") or "115") == cloud_type]
-        if preferred:
-            return preferred
+        return preferred
     if for_sub and cfg.get("d115_enabled"):
         auto_transfer = [it for it in out if (it.get("share_kind") or "115") == "115"]
         if auto_transfer:
@@ -152,6 +151,7 @@ def unlock_share(
         store.add_unlock(
             share_id=share.get("share_id"), resource_id=share.get("resource_id"), tmdb_id=tmdb_id,
             media_type=media_type, season=season, title=title, episode=share.get("episode"),
+            cloud_type=(share.get("share_kind") or "115"),
             tag=share.get("tag_raw"), size=share.get("total_size_human"),
             cost=share.get("unlock_cost"), link="", ok=False, message=str(exc),
         )
@@ -163,6 +163,7 @@ def unlock_share(
     store.add_unlock(
         share_id=share.get("share_id"), resource_id=share.get("resource_id"), tmdb_id=tmdb_id,
         media_type=media_type, season=season, title=title, episode=share.get("episode"),
+        cloud_type=(share.get("share_kind") or "115"),
         tag=share.get("tag_raw"), size=share.get("total_size_human"),
         cost=share.get("unlock_cost"), link=link, ok=ok, message=(res or {}).get("code", ""),
     )
@@ -180,10 +181,15 @@ def unlock_share(
                     ok115, msg115 = receive115(link, cfg.get("d115_cookie"), cfg.get("d115_cid"))
                 extra = (" | " + msg115) if ok115 else (" | 115转存失败：" + msg115)
                 if ok115:
+                    cloud_type = share.get("share_kind") or "115"
+                    transfer_tag = (
+                        "115直连转存" if cloud_type == "115"
+                        else ("ED2K链接获取" if cloud_type == "ed2k" else "磁力链接获取")
+                    )
                     store.add_unlock(
                         share_id=share.get("share_id"), resource_id=share.get("resource_id"), tmdb_id=tmdb_id,
                         media_type=media_type, season=season, title=title, episode=share.get("episode"),
-                        tag="115直连转存", size="", cost=0,
+                        cloud_type=cloud_type, tag=transfer_tag, size="", cost=0,
                         link=link, ok=True, message=msg115,
                     )
             except Exception as exc:  # noqa: BLE001
@@ -221,6 +227,9 @@ def run_subscription_search() -> dict:
         )
         if not candidates:
             lib = data.get("library") or {}
+            cloud_label = {"115": "115", "ed2k": "ED2K", "magnet": "磁力"}.get(
+                sub.get("cloud_type") or "115", "指定网盘"
+            )
             if lib.get("checked") and lib.get("exists"):
                 if lib.get("complete"):
                     message = f"已完整入库 · {lib.get('available_text') or '无需补集'}"
@@ -229,7 +238,7 @@ def run_subscription_search() -> dict:
                 else:
                     message = "已入库 · 没有可补齐的新分享"
             else:
-                message = "没有符合条件的新分享"
+                message = f"没有符合条件的 {cloud_label} 新分享"
             store.update_subscription_status(
                 int(sub["id"]),
                 "completed" if lib.get("complete") else "waiting",

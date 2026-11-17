@@ -122,10 +122,13 @@ def annotate_library(
     """给候选资源标注已入库集数、可补齐集数和是否值得解锁。"""
     seasons = (status or {}).get("seasons") or {}
     pending_rows = pending or []
-    pending_by_season: dict[int, set[int]] = {}
+    pending_by_season_cloud: dict[tuple[int, str], set[int]] = {}
     for row in pending_rows:
         season_no = int(row.get("season") or 0)
-        pending_by_season.setdefault(season_no, set()).update(parse_episode_numbers(row.get("episode") or ""))
+        cloud = str(row.get("cloud_type") or "115").lower()
+        pending_by_season_cloud.setdefault((season_no, cloud), set()).update(
+            parse_episode_numbers(row.get("episode") or "")
+        )
 
     for item in items:
         episode_text = item.get("episode") or ""
@@ -164,7 +167,8 @@ def annotate_library(
         else:
             available = set(status.get("available") or [])
 
-        pending_eps = pending_by_season.get(int(season_no or 0), set())
+        cloud_type = str(item.get("share_kind") or "115").lower()
+        pending_eps = pending_by_season_cloud.get((int(season_no or 0), cloud_type), set())
         item["library_available"] = sorted(available)
         item["library_available_text"] = format_episode_numbers(available)
         item["pending_episode_numbers"] = sorted(pending_eps)
@@ -200,7 +204,7 @@ def rank_shares(items: list[dict], for_tv: bool = False, skip_complete: bool = T
                 cost = int(item.get("unlock_cost") or 0)
             except Exception:
                 cost = 0
-            return (has_new, -pending_overlap, new_count, has_episodes, count, score, -cost)
+            return (has_new, -pending_overlap, new_count, has_episodes, count, -cost, score)
         return (score,)
 
     return sorted(items, key=key, reverse=True)

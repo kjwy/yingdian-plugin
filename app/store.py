@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS unlocks (
   season INTEGER DEFAULT 0,
   title TEXT,
   episode TEXT,
+  cloud_type TEXT,
   tag TEXT,
   size TEXT,
   cost INTEGER,
@@ -76,6 +77,15 @@ def init_db() -> None:
             conn.execute("ALTER TABLE unlocks ADD COLUMN season INTEGER DEFAULT 0")
         if "episode" not in columns:
             conn.execute("ALTER TABLE unlocks ADD COLUMN episode TEXT")
+        if "cloud_type" not in columns:
+            conn.execute("ALTER TABLE unlocks ADD COLUMN cloud_type TEXT")
+        conn.execute(
+            "UPDATE unlocks SET cloud_type = CASE "
+            "WHEN UPPER(COALESCE(tag,'')) LIKE '%ED2K%' THEN 'ed2k' "
+            "WHEN UPPER(COALESCE(tag,'')) LIKE '%磁力%' OR LOWER(COALESCE(tag,'')) LIKE '%magnet%' THEN 'magnet' "
+            "ELSE '115' END "
+            "WHERE cloud_type IS NULL OR cloud_type = ''"
+        )
         sub_columns = {row["name"] for row in conn.execute("PRAGMA table_info(subscriptions)").fetchall()}
         migrations = {
             "start_episode": "INTEGER DEFAULT 1",
@@ -137,7 +147,7 @@ def list_checkins(limit: int = 50) -> list[dict]:
 def add_unlock(**kw: Any) -> None:
     fields = [
         "share_id", "resource_id", "tmdb_id", "media_type", "season", "title", "episode",
-        "tag", "size", "cost", "link", "ok", "message",
+        "cloud_type", "tag", "size", "cost", "link", "ok", "message",
     ]
     values = [kw.get(f) for f in fields]
     with _conn() as conn:
@@ -171,7 +181,7 @@ def recent_tv_pending(tmdb_id: str | int, hours: int = 24) -> list[dict]:
     since = (datetime.now() - timedelta(hours=max(1, int(hours)))).strftime("%Y-%m-%d %H:%M:%S")
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT season, episode, created_at FROM unlocks "
+            "SELECT season, episode, cloud_type, created_at FROM unlocks "
             "WHERE ok = 1 AND media_type = 'tv' AND tmdb_id = ? AND created_at >= ? "
             "AND episode IS NOT NULL AND episode != '' ORDER BY id DESC",
             (str(tmdb_id), since),
