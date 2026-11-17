@@ -243,21 +243,44 @@ class BrowserClient:
                 "(() => { const m = (document.body.innerText||'').match(/([\\d,]{3,})\\s*\\n?\\s*积分/);"
                 " return m ? parseInt(m[1].replace(/,/g,''),10) : null; })()"
             )
-            clicked = s.evaluate(
-                "(() => { const bs = Array.from(document.querySelectorAll('button'));"
-                " const b = bs.find(x => /签到|立即签到|签 到/.test(x.innerText||'') && !x.disabled);"
-                " if (b) { b.click(); return b.innerText.trim(); } return ''; })()"
-            )
+            clicked = ""
+            data = {}
+            body = ""
+            for attempt in range(2):
+                clicked = s.evaluate(
+                    "(() => { const bs = Array.from(document.querySelectorAll('button'));"
+                    " const b = bs.find(x => /签到|立即签到|签 到/.test(x.innerText||'') && !x.disabled);"
+                    " if (b) { b.scrollIntoView({block:'center'}); b.click(); return b.innerText.trim(); } return ''; })()"
+                )
+                if clicked:
+                    data = s.wait_json_response("/api/portal/signin", timeout=20) or {}
+                    if data:
+                        break
+                body = s.evaluate("document.body ? document.body.innerText : ''") or ""
+                if re.search(r"今日已签到|今天已签到|明天再来|已领取", body):
+                    return {"code": "already_signed", "msg": "今日已签到", "raw": data}
+                if attempt == 0:
+                    self._goto(s, "/me/signin", 3.0)
+
             if not clicked:
-                return {"code": "no_button", "msg": "没找到签到按钮 · 可能今日已签到"}
-            data = s.wait_json_response("/api/portal/signin", timeout=20) or {}
-            code = str(data.get("code") or "ok")
-            out = {"code": code, "raw": data}
+                return {"code": "no_button", "msg": "签到页未加载出按钮，请稍后重试", "raw": {"body": body[:300]}}
+
+            out = {"raw": data}
             time.sleep(2)
             after = s.evaluate(
                 "(() => { const m = (document.body.innerText||'').match(/([\\d,]{3,})\\s*\\n?\\s*积分/);"
                 " return m ? parseInt(m[1].replace(/,/g,''),10) : null; })()"
             )
+            body = s.evaluate("document.body ? document.body.innerText : ''") or ""
+            code = str(data.get("code") or "")
+            if not code:
+                if before is not None and after is not None and after > before:
+                    code = "ok"
+                elif re.search(r"今日已签到|今天已签到|明天再来|已领取", body):
+                    code = "already_signed"
+                else:
+                    code = "pending"
+            out["code"] = code
             if before is not None and after is not None and after != before:
                 out["points_awarded"] = after - before
                 out["points_after"] = after
@@ -265,6 +288,8 @@ class BrowserClient:
                 out["msg"] = "签到成功" + (f" +{out['points_awarded']} 积分" if out.get("points_awarded") else "")
             elif code == "already_signed":
                 out["msg"] = "今日已签到"
+            else:
+                out["msg"] = "签到请求已发送，但页面未确认结果，请稍后刷新"
             return out
         finally:
             s.close()

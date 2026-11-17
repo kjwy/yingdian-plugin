@@ -295,7 +295,10 @@ def api_search(payload: dict):
         return {"ok": False, "message": last_msg or "没找到该 TMDB ID 的资源", "items": []}
 
     # 片名：多类型搜索
-    found, err = tmdb.search_multi_ex(raw, limit=8)
+    if media_type in ("movie", "tv"):
+        found, err = tmdb.search_ex(raw, media_type, limit=8)
+    else:
+        found, err = tmdb.search_multi_ex(raw, limit=8)
     if err:
         return {"ok": False, "message": f"TMDB 不可用 · {err} · 可直接填 TMDB ID", "items": []}
     if not found:

@@ -201,6 +201,7 @@ def rankings(kind: str = "trending", limit: int = 20) -> tuple[list[dict], str]:
         if mt not in ("movie", "tv"):
             continue
         poster = it.get("poster_path")
+        poster_url = f"{_img_base('w342')}{poster}" if poster else ""
         out.append({
             "tmdb_id": it.get("id"),
             "title": it.get("title") or it.get("name") or "",
@@ -288,7 +289,7 @@ def douban_rankings(kind: str = "douban_movie_top", limit: int = 24) -> tuple[li
             "poster": poster,
             "proxy_poster": proxy_poster,
             "overview": "",
-            "search_url": "/?q=" + quote(title),
+            "search_url": "/?" + urlencode({"q": title, "media_type": media_type}),
         })
     return out, ""
 

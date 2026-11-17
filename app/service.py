@@ -112,6 +112,7 @@ def unlock_share(
     media_type: str = "",
     tmdb_id: Any = None,
     season: int = 0,
+    max_cost: int | None = None,
 ) -> dict:
     cfg = load_config()
     if cfg.get("skip_in_library") and share.get("library_checked") and share.get("already_complete"):
@@ -126,8 +127,9 @@ def unlock_share(
         payload["resource_id"] = share.get("resource_id")
     if share.get("index") is not None:
         payload["index"] = share.get("index")
-    if share.get("unlock_cost") is not None:
-        payload["max_cost"] = share.get("unlock_cost")
+    payload["max_cost"] = int(
+        max_cost if max_cost is not None else (cfg.get("max_unlock_points") or 20)
+    )
     # 浏览器模式需要 /r/<key> 才能打开资源页
     if mode == "browser" and tmdb_id and media_type:
         try:
@@ -222,6 +224,7 @@ def run_subscription_search() -> dict:
             media_type=media_type,
             tmdb_id=sub.get("tmdb_id"),
             season=season_no,
+            max_cost=int(cfg.get("max_unlock_points_sub") or 20),
         )
         if r.get("ok"):
             store.set_last_share(int(sub["id"]), str(best.get("share_id")))

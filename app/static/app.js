@@ -24,6 +24,7 @@
     const kindMap = { "115": "115", ed2k: "ED2K 离线", magnet: "磁力", offline: "115 离线" };
     const kindKey = (it.share_kind || "115").toLowerCase();
     const kindLabel = kindMap[kindKey] || kindKey.toUpperCase();
+    const actionText = kindKey === "115" ? "解锁并转存" : "解锁并获取链接";
     const episode = it.episode || "";
     let libraryText = "";
     if (it.library_checked) {
@@ -57,7 +58,7 @@
         </div>
         <div class="sr-raw" title="${esc(raw)}">${esc(raw)}</div>
       </div>
-      ${showUnlock ? `<button class="btn primary sm act-unlock" ${disabled ? "disabled" : ""}>${disabled ? "无需重复转存" : "解锁并转存"}</button>` : ""}
+      ${showUnlock ? `<button class="btn primary sm act-unlock" ${disabled ? "disabled" : ""}>${disabled ? "无需重复转存" : actionText}</button>` : ""}
     </div>`;
   }
 
@@ -66,6 +67,7 @@
       btn.addEventListener("click", async () => {
         const rowEl = btn.closest(".share-row") || btn.parentNode;
         const it = JSON.parse(decodeURIComponent(rowEl.getAttribute("data-json")));
+        const actionText = (it.share_kind || "115") === "115" ? "解锁并转存" : "解锁并获取链接";
         btn.disabled = true;
         const t0 = Date.now();
         const box = rowEl.querySelector(".unlock-progress") || (() => {
@@ -85,7 +87,7 @@
         } catch (err) {
           clearInterval(timer);
           box.textContent = "请求失败：" + err.message;
-          btn.textContent = "解锁并转存";
+          btn.textContent = actionText;
           btn.disabled = false;
           return;
         }
@@ -100,7 +102,7 @@
           box.textContent = `❌ ${secs}s：${r.message || "失败"}`;
           box.style.color = "#f87171";
         }
-        btn.textContent = r.ok ? "已转存 ✓" : "重试";
+        btn.textContent = r.ok ? ((it.share_kind || "115") === "115" ? "已转存 ✓" : "链接已获取 ✓") : "重试";
         btn.disabled = r.ok;
       });
     });
@@ -332,6 +334,9 @@
     const q = $("#q-tmdb");
     if (!q) return;
     q.value = tid || directQuery;
+    const typeEl = $("#q-type");
+    const mediaType = params.get("media_type");
+    if (typeEl && ["movie", "tv"].includes(mediaType)) typeEl.value = mediaType;
     const seasonEl = $("#q-season");
     if (seasonEl) seasonEl.value = params.get("season") || "";
     setTimeout(() => { document.getElementById("btn-search")?.click(); }, 300);
