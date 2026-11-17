@@ -439,6 +439,78 @@
     });
   });
 
+  // 榜单无限滚动
+  (function rankingInfiniteScroll() {
+    const grid = $("#rank-grid");
+    const loader = $("#rank-loader");
+    if (!grid || !loader) return;
+    const button = $("#rank-load-more");
+    const status = $("#rank-load-status");
+    const empty = $("#rank-empty");
+    let page = Number(loader.dataset.page || 1);
+    let hasMore = loader.dataset.hasMore === "1";
+    let loading = false;
+
+    function cardHtml(it) {
+      const poster = it.proxy_poster || it.poster || "";
+      const library = it.library_checked
+        ? `<span class="library-badge ${it.library_exists ? "in" : "out"}">${it.library_exists ? "已入库" : "未入库"}</span>`
+        : "";
+      return `<a class="card" href="${esc(it.search_url || "/")}">
+        <div class="card-poster">
+          ${poster ? `<img src="${esc(poster)}" loading="lazy" alt="${esc(it.title)}">` : '<div class="no-img">暂无海报</div>'}
+          ${library}
+        </div>
+        <div class="card-body">
+          <div class="t">${esc(it.title || "")}</div>
+          <div class="meta">
+            <span class="badge">${it.media_type === "tv" ? "剧集" : "电影"}</span>
+            ${it.year ? `<span>${esc(it.year)}</span>` : ""}
+            ${it.rating ? `<span class="rating">★ ${esc(it.rating)}</span>` : ""}
+          </div>
+        </div>
+      </a>`;
+    }
+
+    async function loadMore() {
+      if (loading || !hasMore) return;
+      loading = true;
+      button.disabled = true;
+      status.textContent = "正在加载更多…";
+      page += 1;
+      const params = new URLSearchParams(location.search);
+      params.set("page", String(page));
+      try {
+        const r = await (await fetch(`/api/rankings?${params.toString()}`)).json();
+        if (!r.ok) throw new Error(r.message || "加载失败");
+        if (r.items?.length) {
+          grid.insertAdjacentHTML("beforeend", r.items.map(cardHtml).join(""));
+          empty.style.display = "none";
+        }
+        hasMore = !!r.has_more;
+        status.textContent = hasMore ? "继续下滑自动加载" : "已经到底了";
+        button.style.display = hasMore ? "" : "none";
+      } catch (err) {
+        page -= 1;
+        status.textContent = "加载失败：" + err.message;
+        button.style.display = "";
+      } finally {
+        loading = false;
+        button.disabled = false;
+        loader.dataset.page = String(page);
+        loader.dataset.hasMore = hasMore ? "1" : "0";
+      }
+    }
+
+    button?.addEventListener("click", loadMore);
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      }, { rootMargin: "700px 0px" });
+      observer.observe(loader);
+    }
+  })();
+
   // 添加订阅弹窗
   (function subscriptionModal() {
     const modal = $("#sub-modal");

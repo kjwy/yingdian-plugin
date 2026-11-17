@@ -362,6 +362,8 @@ details.panel > div{padding:0 20px 20px}
 .library-badge{position:absolute;top:9px;right:9px;padding:3px 8px;border-radius:999px;font-size:10.5px;backdrop-filter:blur(8px)}
 .library-badge.in{background:rgba(52,211,153,.88);color:#062e21}
 .library-badge.out{background:rgba(15,23,42,.82);color:#cbd5e1;border:1px solid rgba(255,255,255,.18)}
+.rank-loader{display:flex;justify-content:center;align-items:center;gap:12px;padding:22px 0 4px;color:var(--dim2);font-size:12px}
+.rank-loader .btn{min-width:130px}
 
 /* ===== 订阅页 ===== */
 .sub-tabs{display:flex;align-items:stretch;gap:4px;margin:4px 0 18px;border-bottom:1px solid var(--bd);overflow-x:auto}

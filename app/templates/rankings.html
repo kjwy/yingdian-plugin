@@ -48,8 +48,8 @@
 
   {% if err %}
   <div class="item"><span class="m" style="color:#f87171">❌ {{ err }}</span></div>
-  {% elif items %}
-  <div class="grid rank-grid">
+  {% else %}
+  <div class="grid rank-grid" id="rank-grid">
     {% for it in items %}
     <a class="card" href="{{ it.search_url }}">
       <div class="card-poster">
@@ -69,8 +69,12 @@
     </a>
     {% endfor %}
   </div>
-  {% else %}
-  <div class="empty">当前筛选条件下暂无数据</div>
+  <div class="empty" id="rank-empty" {% if items %}style="display:none"{% endif %}>当前筛选条件下暂无数据</div>
+  <div class="rank-loader" id="rank-loader"
+       data-page="{{ page }}" data-has-more="{{ '1' if has_more else '0' }}">
+    <button class="btn" id="rank-load-more" {% if not has_more %}style="display:none"{% endif %}>加载更多</button>
+    <span id="rank-load-status">{{ "继续下滑自动加载" if has_more else "已经到底了" }}</span>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

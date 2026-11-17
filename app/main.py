@@ -173,6 +173,36 @@ def _enrich_ranking_library(items: list[dict]) -> list[dict]:
         return list(pool.map(work, items))
 
 
+def _load_ranking_items(
+    source: str,
+    kind: str,
+    media_type: str,
+    sort: str,
+    year: str,
+    region: str,
+    genre: str,
+    status: str,
+    doulist_id: str = "",
+    page: int = 1,
+) -> tuple[list[dict], str, bool]:
+    if source == "tmdb":
+        items, err = tmdb.discover_rankings(media_type, sort, year, region, genre, limit=24, page=page)
+    elif source == "douban":
+        items, err = tmdb.douban_discover(media_type, sort, year, region, genre, limit=24, page=page)
+    elif source == "douban_rank":
+        items, err = tmdb.douban_rankings(kind, limit=24, page=page)
+    else:
+        items, err = tmdb.douban_doulist(doulist_id, limit=24)
+    raw_count = len(items)
+    items = _enrich_ranking_library(items)
+    if status == "in_library":
+        items = [x for x in items if x.get("library_exists")]
+    elif status == "not_in_library":
+        items = [x for x in items if x.get("library_checked") and not x.get("library_exists")]
+    has_more = source != "douban_list" and raw_count > 0
+    return items, err, has_more
+
+
 @app.get("/rankings")
 def rankings_page(
     request: Request,
@@ -185,6 +215,7 @@ def rankings_page(
     genre: str = "all",
     status: str = "all",
     doulist_id: str = "",
+    page: int = 1,
 ):
     source = source if source in ("tmdb", "douban", "douban_rank", "douban_list") else "tmdb"
     media_type = media_type if media_type in ("movie", "tv") else "movie"
@@ -192,20 +223,10 @@ def rankings_page(
         "media_type": media_type, "sort": sort, "year": year,
         "region": region, "genre": genre, "status": status,
     }
-    if source == "tmdb":
-        items, err = tmdb.discover_rankings(media_type, sort, year, region, genre, limit=24)
-    elif source == "douban":
-        items, err = tmdb.douban_discover(media_type, sort, year, region, genre, limit=24)
-    elif source == "douban_rank":
-        items, err = tmdb.douban_rankings(kind, limit=24)
-    else:
-        items, err = tmdb.douban_doulist(doulist_id, limit=24)
-
-    items = _enrich_ranking_library(items)
-    if status == "in_library":
-        items = [x for x in items if x.get("library_exists")]
-    elif status == "not_in_library":
-        items = [x for x in items if x.get("library_checked") and not x.get("library_exists")]
+    page = max(1, int(page or 1))
+    items, err, has_more = _load_ranking_items(
+        source, kind, media_type, sort, year, region, genre, status, doulist_id, page,
+    )
 
     labels = {
         "tmdb": "TMDB 发现", "douban": "豆瓣发现",
@@ -226,6 +247,8 @@ def rankings_page(
         "filter_groups": _ranking_filter_groups(source, kind, current, doulist_id),
         "current": current,
         "doulist_id": doulist_id,
+        "page": page,
+        "has_more": has_more,
     })
 
 
@@ -575,6 +598,28 @@ def api_subs_run():
 @app.post("/api/rss/poll")
 def api_rss_poll():
     return service.rss_poll()
+
+
+@app.get("/api/rankings")
+def api_rankings(
+    source: str = "tmdb",
+    kind: str = "trending",
+    media_type: str = "movie",
+    sort: str = "default",
+    year: str = "all",
+    region: str = "all",
+    genre: str = "all",
+    status: str = "all",
+    doulist_id: str = "",
+    page: int = 1,
+):
+    source = source if source in ("tmdb", "douban", "douban_rank", "douban_list") else "tmdb"
+    media_type = media_type if media_type in ("movie", "tv") else "movie"
+    items, err, has_more = _load_ranking_items(
+        source, kind, media_type, sort, year, region, genre, status,
+        doulist_id, max(1, int(page or 1)),
+    )
+    return {"ok": not bool(err), "items": items, "message": err, "has_more": has_more, "page": page}
 
 
 @app.post("/api/client/check")

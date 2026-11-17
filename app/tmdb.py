@@ -185,14 +185,17 @@ RANKING_PATHS = {
 }
 
 
-def rankings(kind: str = "trending", limit: int = 20) -> tuple[list[dict], str]:
+def rankings(kind: str = "trending", limit: int = 20, page: int = 1) -> tuple[list[dict], str]:
     """TMDB 榜单"""
     cfg = _cfg()
     key = (cfg.get("tmdb_api_key") or "").strip()
     if not key:
         return [], "未填写 TMDB API Key"
     path, _label = RANKING_PATHS.get(kind, RANKING_PATHS["trending"])
-    data, err = _get(path, {"api_key": key, "language": cfg.get("tmdb_language", "zh-CN"), "page": 1})
+    data, err = _get(path, {
+        "api_key": key, "language": cfg.get("tmdb_language", "zh-CN"),
+        "page": max(1, int(page)),
+    })
     if data is None:
         return [], f"TMDB 连接失败 · {err}"
     out = []
@@ -262,6 +265,7 @@ def discover_rankings(
     region: str = "all",
     genre: str = "all",
     limit: int = 24,
+    page: int = 1,
 ) -> tuple[list[dict], str]:
     """带筛选的 TMDB 发现列表。"""
     cfg = _cfg()
@@ -278,7 +282,7 @@ def discover_rankings(
     params = {
         "api_key": key,
         "language": cfg.get("tmdb_language", "zh-CN"),
-        "page": 1,
+        "page": max(1, int(page)),
         "sort_by": order,
         "include_adult": "false",
     }
@@ -327,6 +331,7 @@ def douban_discover(
     region: str = "all",
     genre: str = "all",
     limit: int = 24,
+    page: int = 1,
 ) -> tuple[list[dict], str]:
     """带筛选的豆瓣列表。"""
     media_type = media_type if media_type in ("movie", "tv") else "movie"
@@ -367,7 +372,8 @@ def douban_discover(
                 "https://movie.douban.com/j/search_subjects",
                 params={
                     "type": media_type, "tag": ",".join(tags), "sort": sort_value,
-                    "page_limit": max(1, limit), "page_start": 0,
+                    "page_limit": max(1, limit),
+                    "page_start": max(0, (max(1, int(page)) - 1) * limit),
                 },
             )
             response.raise_for_status()
@@ -451,7 +457,11 @@ def douban_doulist(doulist_id: str, limit: int = 24) -> tuple[list[dict], str]:
     return (rows, "") if rows else ([], "片单页面没有读取到影片，可能未公开或页面结构已变化")
 
 
-def douban_rankings(kind: str = "douban_movie_top", limit: int = 24) -> tuple[list[dict], str]:
+def douban_rankings(
+    kind: str = "douban_movie_top",
+    limit: int = 24,
+    page: int = 1,
+) -> tuple[list[dict], str]:
     """豆瓣榜单。使用豆瓣公开网页接口，不依赖额外 API Key。"""
     mode, media_type, tag = DOUBAN_LISTS.get(kind, DOUBAN_LISTS["douban_movie_top"])
     headers = {
@@ -477,7 +487,8 @@ def douban_rankings(kind: str = "douban_movie_top", limit: int = 24) -> tuple[li
                 params={
                     "type": media_type, "tag": tag,
                     "sort": "rank" if tag == "豆瓣高分" else "recommend",
-                    "page_limit": max(1, limit), "page_start": 0,
+                    "page_limit": max(1, limit),
+                    "page_start": max(0, (max(1, int(page)) - 1) * limit),
                 },
             )
             response.raise_for_status()
