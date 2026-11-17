@@ -1,45 +1,219 @@
 {% extends "base.html" %}
+{% block title %}订阅 · 影癫插件{% endblock %}
 {% block content %}
-<div class="panel">
-  <div class="head"><h3>添加订阅</h3><span class="hint">先用片名搜 TMDB，或直接填 TMDB ID</span></div>
-  <div class="row">
-    <input id="tmdb-q" class="inp" placeholder="片名，如：沙丘">
-    <select id="tmdb-type" class="inp"><option value="movie">电影</option><option value="tv">剧集</option></select>
-    <button class="btn primary" id="btn-tmdb">搜索 TMDB</button>
-  </div>
-  <div id="tmdb-results" class="results"></div>
+<div class="sub-tabs">
+  <a class="{{ 'on' if tab == 'movie' }}" href="/subs?tab=movie">
+    <span>🎬</span>电影订阅{% if counts.movie %}<b>{{ counts.movie }}</b>{% endif %}
+  </a>
+  <a class="{{ 'on' if tab == 'tv' }}" href="/subs?tab=tv">
+    <span>▶</span>电视剧订阅{% if counts.tv %}<b>{{ counts.tv }}</b>{% endif %}
+  </a>
+  <a class="{{ 'on' if tab == 'calendar' }}" href="/subs?tab=calendar">
+    <span>▦</span>订阅日历
+  </a>
+  <a class="{{ 'on' if tab == 'rules' }}" href="/subs?tab=rules"><span>⌘</span>规则</a>
+  <a class="{{ 'on' if tab == 'config' }}" href="/subs?tab=config"><span>⚙</span>配置</a>
+</div>
 
-  <hr>
-  <form method="post" action="/subs/add" class="row">
-    <input class="inp" name="title" placeholder="标题">
-    <input class="inp" name="tmdb_id" placeholder="TMDB ID" required>
-    <select class="inp" name="media_type"><option value="movie">电影</option><option value="tv">剧集</option></select>
-    <input class="inp" name="season" type="number" value="0" placeholder="季">
-    <button class="btn primary">添加订阅</button>
+{% if tab in ('movie', 'tv') %}
+<div class="panel sub-filter-panel">
+  <div class="filter-line">
+    <span class="filter-label">状态</span>
+    <div class="filter-pills">
+      <a class="filter-pill {{ 'active' if status == 'all' }}" href="/subs?tab={{ tab }}&status=all&cloud={{ cloud }}&update={{ update }}">全部</a>
+      <a class="filter-pill {{ 'active' if status == 'incomplete' }}" href="/subs?tab={{ tab }}&status=incomplete&cloud={{ cloud }}&update={{ update }}">未完成</a>
+      <a class="filter-pill {{ 'active' if status == 'completed' }}" href="/subs?tab={{ tab }}&status=completed&cloud={{ cloud }}&update={{ update }}">已完成</a>
+    </div>
+  </div>
+  <div class="filter-line">
+    <span class="filter-label">网盘</span>
+    <div class="filter-pills">
+      <a class="filter-pill {{ 'active' if cloud == 'all' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud=all&update={{ update }}">全部</a>
+      <a class="filter-pill {{ 'active' if cloud == '115' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud=115&update={{ update }}">115网盘</a>
+      <a class="filter-pill {{ 'active' if cloud == 'ed2k' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud=ed2k&update={{ update }}">ED2K</a>
+      <a class="filter-pill {{ 'active' if cloud == 'magnet' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud=magnet&update={{ update }}">磁力</a>
+    </div>
+  </div>
+  <div class="filter-line">
+    <span class="filter-label">更新</span>
+    <div class="filter-pills">
+      <a class="filter-pill {{ 'active' if update == 'all' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud={{ cloud }}&update=all">全部</a>
+      <a class="filter-pill {{ 'active' if update == 'today' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud={{ cloud }}&update=today">今日更新</a>
+      <a class="filter-pill {{ 'active' if update == '3d' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud={{ cloud }}&update=3d">三日更新</a>
+      <a class="filter-pill {{ 'active' if update == 'week' }}" href="/subs?tab={{ tab }}&status={{ status }}&cloud={{ cloud }}&update=week">本周更新</a>
+    </div>
+  </div>
+  <div class="sub-search-row">
+    <form method="get" action="/subs" class="sub-search">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <input type="hidden" name="status" value="{{ status }}">
+      <input type="hidden" name="cloud" value="{{ cloud }}">
+      <input type="hidden" name="update" value="{{ update }}">
+      <span>⌕</span>
+      <input name="q" value="{{ q }}" placeholder="搜索订阅名称或 TMDB ID">
+    </form>
+    <button class="btn primary" id="open-sub-modal" data-type="{{ tab }}">＋ 添加订阅</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="head">
+    <h3>{{ "电影订阅" if tab == "movie" else "电视剧订阅" }} · {{ subs|length }}</h3>
+    <button class="btn" id="btn-subs-run2">立即执行搜索</button>
+  </div>
+  <div id="subs-run-result" class="results"></div>
+  {% if subs %}
+  <div class="sub-list">
+    {% for s in subs %}
+    <div class="sub-card">
+      <div class="sub-main">
+        <div class="sub-title">
+          <strong>{{ s.title }}</strong>
+          <span class="cloud-tag cloud-{{ s.cloud_type or '115' }}">{{ "115网盘" if (s.cloud_type or "115") == "115" else ("ED2K" if s.cloud_type == "ed2k" else "磁力") }}</span>
+          {% if s.completed %}<span class="status-tag done">已完成</span>
+          {% elif s.last_status == "success" %}<span class="status-tag ok">已转存</span>
+          {% elif s.last_status == "error" %}<span class="status-tag bad">失败</span>
+          {% elif s.last_status == "filtered" %}<span class="status-tag warn">已过滤</span>
+          {% else %}<span class="status-tag">待更新</span>{% endif %}
+        </div>
+        <div class="sub-meta">
+          <span>TMDB {{ s.tmdb_id }}</span>
+          {% if s.media_type == "tv" %}
+          <span>第 {{ s.season or 0 }} 季</span>
+          <span>起始第 {{ s.start_episode or 1 }} 集</span>
+          {% if s.total_episodes %}<span>共 {{ s.total_episodes }} 集</span>{% endif %}
+          {% endif %}
+          <span>{{ "启用" if s.enabled else "暂停" }}</span>
+        </div>
+        {% if s.last_message %}<div class="sub-message">{{ s.last_message }}</div>{% endif %}
+        <div class="sub-time">上次检查：{{ s.last_checked_at or "尚未执行" }}</div>
+      </div>
+      <div class="sub-actions">
+        <form method="post" action="/subs/{{ s.id }}/toggle">
+          <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
+          <button class="btn sm">{{ "暂停" if s.enabled else "启用" }}</button>
+        </form>
+        <form method="post" action="/subs/{{ s.id }}/delete">
+          <button class="btn sm danger">删除</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">没有符合筛选条件的订阅</div>
+  {% endif %}
+</div>
+
+<div class="modal-backdrop" id="sub-modal" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3>添加订阅任务</h3>
+        <p>选择 TMDB 条目后自动匹配影癫资源</p>
+      </div>
+      <button class="icon-btn" id="close-sub-modal">×</button>
+    </div>
+    <form method="post" action="/subs/add" id="sub-add-form">
+      <div class="form-grid">
+        <label>标题
+          <div class="input-icon">
+            <input class="inp" id="sub-title" name="title" placeholder="输入片名搜索 TMDB">
+            <button type="button" class="icon-btn" id="btn-sub-tmdb">⌕</button>
+          </div>
+        </label>
+        <label>TMDB ID
+          <input class="inp" id="sub-tmdb" name="tmdb_id" placeholder="可直接填写" required>
+        </label>
+        <label>类型
+          <select class="inp" id="sub-type" name="media_type">
+            <option value="movie">电影</option>
+            <option value="tv">电视剧</option>
+          </select>
+        </label>
+        <label>季
+          <input class="inp" name="season" type="number" value="1" min="0">
+        </label>
+        <label>开始集数
+          <input class="inp" name="start_episode" type="number" value="1" min="1">
+        </label>
+        <label>总集数
+          <input class="inp" name="total_episodes" type="number" value="0" min="0">
+        </label>
+        <label>频道类型
+          <select class="inp" name="cloud_type">
+            <option value="115">115网盘</option>
+            <option value="ed2k">ED2K 离线</option>
+            <option value="magnet">磁力</option>
+          </select>
+        </label>
+        <label>订阅链接，可留空
+          <input class="inp" name="subscription_url" placeholder="https://re0.me/resource/...">
+        </label>
+      </div>
+      <div id="sub-tmdb-results" class="results"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="cancel-sub-modal">取消</button>
+        <button class="btn primary">添加订阅</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% elif tab == 'calendar' %}
+<div class="panel calendar-panel">
+  <div class="calendar-head">
+    <a class="btn sm" href="/subs?tab=calendar&month={{ calendar.prev }}">‹ 上个月</a>
+    <h3>{{ calendar.title }}</h3>
+    <a class="btn sm" href="/subs?tab=calendar&month={{ calendar.next }}">下个月 ›</a>
+  </div>
+  <div class="calendar-grid">
+    {% for name in ['一', '二', '三', '四', '五', '六', '日'] %}<div class="calendar-weekday">周{{ name }}</div>{% endfor %}
+    {% for week in calendar.weeks %}
+      {% for day in week %}
+      <div class="calendar-day {{ 'muted' if not day.in_month }} {{ 'today' if day.today }}">
+        <div class="day-number">{{ day.day }}</div>
+        {% for e in day.events %}
+        <div class="calendar-event" title="{{ e.title }} 第{{ e.episode }}集">
+          <b>{{ e.title }}</b><span>第{{ e.episode }}集</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+  {% if not calendar.events %}<div class="empty">本月暂无订阅更新时间</div>{% endif %}
+</div>
+
+{% elif tab == 'rules' %}
+<div class="panel">
+  <div class="head"><h3>订阅匹配规则</h3></div>
+  <form method="post" action="/subs/rules">
+    <div class="form-grid">
+      <label>电影过滤词<input class="inp" name="movie_filter" value="{{ cfg.movie_filter }}" placeholder="留空匹配全部"></label>
+      <label>电视剧过滤词<input class="inp" name="tv_filter" value="{{ cfg.tv_filter }}" placeholder="留空匹配全部"></label>
+      <label>订阅解锁积分上限<input class="inp" type="number" name="max_unlock_points_sub" value="{{ cfg.max_unlock_points_sub }}"></label>
+    </div>
+    <label class="chk"><input type="checkbox" name="only_free" {{ "checked" if cfg.only_free }}>只自动解锁免费资源</label>
+    <button class="btn primary">保存规则</button>
   </form>
 </div>
 
+{% elif tab == 'config' %}
 <div class="panel">
-  <div class="head"><h3>订阅列表 · {{ subs|length }}</h3><button class="btn" id="btn-subs-run2">立即执行搜索</button></div>
-  <div class="hint" style="margin-bottom:10px">剧集订阅优先补齐未入库集数，已入库和正在转存的内容会自动跳过。</div>
-  {% if subs %}
-  <table>
-    <tr><th>标题</th><th>TMDB</th><th>类型</th><th>季</th><th>状态</th><th>上次 share</th><th>操作</th></tr>
-    {% for s in subs %}
-    <tr>
-      <td>{{ s.title }}</td><td>{{ s.tmdb_id }}</td>
-      <td>{{ "剧集" if s.media_type == "tv" else "电影" }}</td>
-      <td>{{ s.season }}</td>
-      <td class="{{ 'ok' if s.enabled else 'bad' }}">{{ "启用" if s.enabled else "暂停" }}</td>
-      <td class="tag">{{ s.last_share_id or "-" }}</td>
-      <td class="ops">
-        <form method="post" action="/subs/{{ s.id }}/toggle"><input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}"><button class="btn sm">{{ "暂停" if s.enabled else "启用" }}</button></form>
-        <form method="post" action="/subs/{{ s.id }}/delete"><button class="btn sm danger">删除</button></form>
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}<div class="empty">还没有订阅，先用上面搜索添加</div>{% endif %}
+  <div class="head"><h3>订阅运行配置</h3></div>
+  <form method="post" action="/subs/config">
+    <div class="form-grid">
+      <label>自动检查间隔
+        <input class="inp" type="number" name="subs_interval_minutes" value="{{ cfg.subs_interval_minutes }}" min="5">
+      </label>
+      <label>防重复转存时间
+        <input class="inp" type="number" name="pending_unlock_hours" value="{{ cfg.pending_unlock_hours }}" min="1">
+      </label>
+    </div>
+    <label class="chk"><input type="checkbox" name="skip_in_library" {{ "checked" if cfg.skip_in_library }}>自动跳过已入库和正在转存的集数</label>
+    <button class="btn primary">保存配置</button>
+  </form>
 </div>
+{% endif %}
 {% endblock %}
-

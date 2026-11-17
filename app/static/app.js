@@ -439,7 +439,70 @@
     });
   });
 
-  // TMDB 搜索（订阅页）
+  // 添加订阅弹窗
+  (function subscriptionModal() {
+    const modal = $("#sub-modal");
+    if (!modal) return;
+    const typeEl = $("#sub-type");
+    const titleEl = $("#sub-title");
+    const tmdbEl = $("#sub-tmdb");
+    const resultEl = $("#sub-tmdb-results");
+    const open = (type) => {
+      if (typeEl && ["movie", "tv"].includes(type)) typeEl.value = type;
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+      setTimeout(() => titleEl?.focus(), 80);
+    };
+    const close = () => {
+      modal.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
+    };
+    $("#open-sub-modal")?.addEventListener("click", (e) => open(e.currentTarget.dataset.type));
+    $("#close-sub-modal")?.addEventListener("click", close);
+    $("#cancel-sub-modal")?.addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+
+    async function selectTmdb(item) {
+      titleEl.value = item.title || "";
+      tmdbEl.value = item.tmdb_id || "";
+      typeEl.value = item.media_type || "movie";
+      resultEl.innerHTML = `<div class="item"><span class="t">${esc(item.title)}</span><span class="m">已选择 · TMDB ${esc(item.tmdb_id)}</span></div>`;
+      const seasonInput = modal.querySelector('[name="season"]');
+      const totalInput = modal.querySelector('[name="total_episodes"]');
+      try {
+        const d = await api(`/api/tmdb/detail?tmdb_id=${encodeURIComponent(item.tmdb_id)}&media_type=${encodeURIComponent(item.media_type || "movie")}&season=${encodeURIComponent(seasonInput?.value || 1)}`);
+        if (d.total_episodes && totalInput) totalInput.value = d.total_episodes;
+      } catch (e) {}
+    }
+
+    $("#btn-sub-tmdb")?.addEventListener("click", async () => {
+      const q = titleEl.value.trim();
+      if (!q) { titleEl.focus(); return; }
+      resultEl.innerHTML = '<div class="item"><span class="m">搜索 TMDB…</span></div>';
+      try {
+        const r = await api("/api/tmdb/search", { q, media_type: typeEl.value });
+        if (!r.items?.length) {
+          resultEl.innerHTML = '<div class="item"><span class="m">没有找到 TMDB 条目</span></div>';
+          return;
+        }
+        resultEl.innerHTML = r.items.map((it, idx) => `<div class="item">
+          <span class="t">${esc(it.title)}</span>
+          <span class="m">${esc(it.year || "")} · TMDB ${esc(it.tmdb_id)} · ${it.media_type === "tv" ? "电视剧" : "电影"}</span>
+          <button type="button" class="btn sm act-pick-tmdb" data-index="${idx}">选择</button>
+        </div>`).join("");
+        resultEl.querySelectorAll(".act-pick-tmdb").forEach((btn) => {
+          btn.addEventListener("click", () => selectTmdb(r.items[Number(btn.dataset.index)]));
+        });
+      } catch (e) {
+        resultEl.innerHTML = `<div class="item"><span class="m">搜索失败：${esc(e.message)}</span></div>`;
+      }
+    });
+  })();
+
+  // 兼容旧版 TMDB 搜索
   $("#btn-tmdb")?.addEventListener("click", async () => {
     const q = $("#tmdb-q").value.trim();
     const media_type = $("#tmdb-type").value;

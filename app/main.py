@@ -1,9 +1,12 @@
 """影癫插件 Web 服务"""
 from __future__ import annotations
 
+import calendar as calendar_module
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import RedirectResponse, Response
@@ -104,44 +107,125 @@ def search_page(request: Request):
     return render(request, "search.html")
 
 
+RANK_FILTERS = {
+    "media_type": [("movie", "电影"), ("tv", "电视剧")],
+    "sort": [("default", "综合排序"), ("latest", "最新上映"), ("hot", "近期热门"), ("rating", "高分优先")],
+    "year": [("all", "全部")] + [(str(date.today().year - i), str(date.today().year - i)) for i in range(6)]
+            + [("2020s", "2020年代"), ("2010s", "2010年代"), ("2000s", "2000年代"),
+               ("1990s", "90年代"), ("1980s", "80年代")],
+    "region": [("all", "全部"), ("zh", "华语"), ("en", "欧美"), ("ko", "韩国"), ("ja", "日本"),
+               ("hk", "中国香港"), ("tw", "中国台湾"), ("uk", "英国"), ("fr", "法国"),
+               ("de", "德国"), ("in", "印度")],
+    "genre": [("all", "全部"), ("comedy", "喜剧"), ("romance", "爱情"), ("action", "动作"),
+              ("scifi", "科幻"), ("animation", "动画"), ("mystery", "悬疑"), ("crime", "犯罪"),
+              ("thriller", "惊悚"), ("adventure", "冒险"), ("music", "音乐"),
+              ("history", "历史"), ("fantasy", "奇幻"), ("horror", "恐怖"),
+              ("war", "战争"), ("documentary", "纪录片"), ("drama", "剧情")],
+    "status": [("all", "全部"), ("in_library", "已入库"), ("not_in_library", "未入库")],
+}
+
+
+def _ranking_filter_groups(source: str, kind: str, current: dict, doulist_id: str = "") -> list[dict]:
+    groups = []
+    for name, choices in RANK_FILTERS.items():
+        links = []
+        for value, label in choices:
+            params = {
+                "source": source, "kind": kind,
+                "media_type": current.get("media_type", "movie"),
+                "sort": current.get("sort", "default"),
+                "year": current.get("year", "all"),
+                "region": current.get("region", "all"),
+                "genre": current.get("genre", "all"),
+                "status": current.get("status", "all"),
+                "doulist_id": doulist_id,
+            }
+            params[name] = value
+            links.append({"value": value, "label": label, "active": current.get(name, "") == value,
+                          "href": "/rankings?" + urlencode(params)})
+        groups.append({"name": name, "label": {
+            "media_type": "类型", "sort": "排序", "year": "年代", "region": "地区",
+            "genre": "风格", "status": "状态",
+        }[name], "choices": links})
+    return groups
+
+
+def _enrich_ranking_library(items: list[dict]) -> list[dict]:
+    if not items:
+        return items
+
+    def work(item: dict) -> dict:
+        tmdb_id = item.get("tmdb_id")
+        media_type = item.get("media_type") or "movie"
+        if not tmdb_id and item.get("title"):
+            found, _ = tmdb.search_ex(item["title"], media_type, limit=1)
+            if found:
+                tmdb_id = found[0]["tmdb_id"]
+                item["tmdb_id"] = tmdb_id
+                item["search_url"] = "/?" + urlencode({"tmdb_id": tmdb_id, "media_type": media_type})
+        if tmdb_id:
+            quick = library.quick_status(tmdb_id, media_type)
+            item["library_checked"] = quick.get("checked", False)
+            item["library_exists"] = quick.get("exists", False)
+        return item
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return list(pool.map(work, items))
+
+
 @app.get("/rankings")
-def rankings_page(request: Request, kind: str = "trending", source: str = "tmdb"):
-    source = source if source in ("tmdb", "douban") else "tmdb"
-    if source == "douban":
+def rankings_page(
+    request: Request,
+    kind: str = "trending",
+    source: str = "tmdb",
+    media_type: str = "movie",
+    sort: str = "default",
+    year: str = "all",
+    region: str = "all",
+    genre: str = "all",
+    status: str = "all",
+    doulist_id: str = "",
+):
+    source = source if source in ("tmdb", "douban", "douban_rank", "douban_list") else "tmdb"
+    media_type = media_type if media_type in ("movie", "tv") else "movie"
+    current = {
+        "media_type": media_type, "sort": sort, "year": year,
+        "region": region, "genre": genre, "status": status,
+    }
+    if source == "tmdb":
+        items, err = tmdb.discover_rankings(media_type, sort, year, region, genre, limit=24)
+    elif source == "douban":
+        items, err = tmdb.douban_discover(media_type, sort, year, region, genre, limit=24)
+    elif source == "douban_rank":
         items, err = tmdb.douban_rankings(kind, limit=24)
     else:
-        items, err = tmdb.rankings(kind, limit=24)
-    tmdb_labels = {
-        "trending": "本周热门", "movie_popular": "电影热门", "movie_top": "电影高分",
-        "movie_now": "正在上映", "tv_popular": "剧集热门", "tv_top": "剧集高分",
+        items, err = tmdb.douban_doulist(doulist_id, limit=24)
+
+    items = _enrich_ranking_library(items)
+    if status == "in_library":
+        items = [x for x in items if x.get("library_exists")]
+    elif status == "not_in_library":
+        items = [x for x in items if x.get("library_checked") and not x.get("library_exists")]
+
+    labels = {
+        "tmdb": "TMDB 发现", "douban": "豆瓣发现",
+        "douban_rank": "豆瓣榜单", "douban_list": "豆瓣片单",
     }
-    douban_labels = {
-        "douban_movie_top": "豆瓣高分电影", "douban_movie_hot": "豆瓣热门电影",
-        "douban_tv_hot": "豆瓣热门剧集", "douban_tv_domestic": "国产剧热门",
-        "douban_tv_korean": "韩剧热门",
-    }
-    labels = douban_labels if source == "douban" else tmdb_labels
-    if source == "tmdb":
-        kinds = [
-            ("trending", "本周热门"), ("movie_popular", "电影热门"),
-            ("movie_top", "电影高分"), ("tv_popular", "剧集热门"), ("tv_top", "剧集高分"),
-        ]
-    else:
-        kinds = [
-            ("douban_movie_top", "豆瓣高分"), ("douban_movie_hot", "热门电影"),
-            ("douban_tv_hot", "热门剧集"), ("douban_tv_domestic", "国产剧"),
-            ("douban_tv_korean", "韩剧"),
-        ]
-    default_kind = kinds[0][0]
-    if kind not in {key for key, _ in kinds}:
-        kind = default_kind
-        if source == "douban":
-            items, err = tmdb.douban_rankings(kind, limit=24)
-        else:
-            items, err = tmdb.rankings(kind, limit=24)
+    rank_kinds = [
+        ("douban_movie_top", "豆瓣高分"), ("douban_movie_hot", "热门电影"),
+        ("douban_tv_hot", "热门剧集"), ("douban_tv_domestic", "国产剧"),
+        ("douban_tv_korean", "韩剧"),
+    ]
     return render(request, "rankings.html", {
-        "items": items, "err": err, "kind": kind, "label": labels.get(kind, "榜单"),
-        "kinds": kinds, "source": source,
+        "items": items,
+        "err": err,
+        "kind": kind,
+        "label": labels[source],
+        "source": source,
+        "rank_kinds": rank_kinds,
+        "filter_groups": _ranking_filter_groups(source, kind, current, doulist_id),
+        "current": current,
+        "doulist_id": doulist_id,
     })
 
 
@@ -197,7 +281,7 @@ async def settings_save(request: Request):
         ("max_unlock_points", int), ("unlock_rate_per_minute", int), ("max_unlock_points_sub", int),
         ("checkin_window_start", int), ("checkin_window_end", int), ("rss_interval_minutes", int),
         ("expire_remind_hours", int), ("cdp_port", int),
-        ("pending_unlock_hours", int),
+        ("pending_unlock_hours", int), ("subs_interval_minutes", int),
     ]:
         if key in form and str(form.get(key)).strip():
             try:
@@ -209,16 +293,138 @@ async def settings_save(request: Request):
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
+def _subscription_calendar(month: str) -> tuple[dict, str, str]:
+    today = date.today()
+    try:
+        year, month_no = (int(x) for x in month.split("-", 1))
+        current = date(year, month_no, 1)
+    except Exception:
+        current = today.replace(day=1)
+    prev_month = (current.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    next_month = (current.replace(day=28) + timedelta(days=4)).replace(day=1).strftime("%Y-%m")
+    events = []
+    for sub in store.list_subscriptions():
+        if sub.get("media_type") != "tv" or not sub.get("tmdb_id"):
+            continue
+        for episode in tmdb.season_episodes(sub["tmdb_id"], int(sub.get("season") or 0)):
+            air_date = episode.get("air_date") or ""
+            if not air_date.startswith(current.strftime("%Y-%m")):
+                continue
+            events.append({
+                "date": air_date,
+                "title": sub.get("title") or "",
+                "episode": episode.get("episode") or 0,
+                "name": episode.get("name") or "",
+                "subscription_id": sub.get("id"),
+            })
+    events.sort(key=lambda x: (x["date"], x["title"], x["episode"]))
+    by_day = {}
+    for event in events:
+        try:
+            day = int(event["date"][8:10])
+        except Exception:
+            continue
+        by_day.setdefault(day, []).append(event)
+    weeks = []
+    for week in calendar_module.Calendar(firstweekday=0).monthdatescalendar(current.year, current.month):
+        row = []
+        for day in week:
+            row.append({
+                "day": day.day,
+                "in_month": day.month == current.month,
+                "today": day == today,
+                "events": by_day.get(day.day, []) if day.month == current.month else [],
+            })
+        weeks.append(row)
+    return {
+        "month": current.strftime("%Y-%m"),
+        "title": current.strftime("%Y年%m月"),
+        "weeks": weeks,
+        "events": events,
+        "prev": prev_month,
+        "next": next_month,
+    }, prev_month, next_month
+
+
 @app.get("/subs")
-def subs_page(request: Request):
+def subs_page(
+    request: Request,
+    tab: str = "tv",
+    status: str = "all",
+    cloud: str = "all",
+    update: str = "all",
+    q: str = "",
+    month: str = "",
+):
     cfg = load_config()
-    return render(request, "subs.html", {"cfg": cfg, "subs": store.list_subscriptions()})
+    tab = tab if tab in ("movie", "tv", "calendar", "rules", "config") else "tv"
+    all_subs = store.list_subscriptions()
+    counts = {
+        "movie": sum(1 for s in all_subs if s.get("media_type") == "movie"),
+        "tv": sum(1 for s in all_subs if s.get("media_type") == "tv"),
+        "calendar": sum(1 for s in all_subs if s.get("media_type") == "tv"),
+    }
+    subs = all_subs
+    if tab in ("movie", "tv"):
+        subs = [s for s in subs if s.get("media_type") == tab]
+        if status == "incomplete":
+            subs = [s for s in subs if not s.get("completed")]
+        elif status == "completed":
+            subs = [s for s in subs if s.get("completed")]
+        if cloud != "all":
+            subs = [s for s in subs if (s.get("cloud_type") or "115") == cloud]
+        if update != "all":
+            now = datetime.now()
+            days = 1 if update == "today" else (3 if update == "3d" else 7)
+            since = (now - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+            subs = [
+                s for s in subs
+                if (s.get("last_checked_at") or s.get("created_at") or "") >= since
+            ]
+        if q.strip():
+            needle = q.strip().lower()
+            subs = [
+                s for s in subs
+                if needle in (s.get("title") or "").lower()
+                or needle in str(s.get("tmdb_id") or "")
+            ]
+    calendar_data = _subscription_calendar(month)[0] if tab == "calendar" else None
+    return render(request, "subs.html", {
+        "cfg": cfg,
+        "subs": subs,
+        "all_subs": all_subs,
+        "counts": counts,
+        "tab": tab,
+        "status": status,
+        "cloud": cloud,
+        "update": update,
+        "q": q,
+        "calendar": calendar_data,
+    })
 
 
 @app.post("/subs/add")
-def subs_add(title: str = Form(""), tmdb_id: str = Form(...), media_type: str = Form("movie"), season: int = Form(0)):
-    store.add_subscription(title.strip() or f"TMDB {tmdb_id}", tmdb_id.strip(), media_type, int(season or 0))
-    return RedirectResponse("/subs", status_code=303)
+def subs_add(
+    title: str = Form(""),
+    tmdb_id: str = Form(...),
+    media_type: str = Form("movie"),
+    season: int = Form(0),
+    start_episode: int = Form(1),
+    total_episodes: int = Form(0),
+    cloud_type: str = Form("115"),
+    subscription_url: str = Form(""),
+):
+    store.add_subscription(
+        title.strip() or f"TMDB {tmdb_id}",
+        tmdb_id.strip(),
+        media_type,
+        int(season or 0),
+        start_episode=int(start_episode or 1),
+        total_episodes=int(total_episodes or 0),
+        cloud_type=cloud_type,
+        subscription_url=subscription_url.strip(),
+    )
+    return RedirectResponse(f"/subs?tab={media_type}", status_code=303)
 
 
 @app.post("/subs/{sid}/delete")
@@ -231,6 +437,29 @@ def subs_delete(sid: int):
 def subs_toggle(sid: int, enabled: str = Form("0")):
     store.toggle_subscription(sid, enabled == "1")
     return RedirectResponse("/subs", status_code=303)
+
+
+@app.post("/subs/rules")
+async def subs_rules(request: Request):
+    cfg = load_config()
+    form = await request.form()
+    cfg["movie_filter"] = str(form.get("movie_filter") or "").strip()
+    cfg["tv_filter"] = str(form.get("tv_filter") or "").strip()
+    cfg["max_unlock_points_sub"] = int(form.get("max_unlock_points_sub") or 20)
+    cfg["only_free"] = "only_free" in form
+    save_config(cfg)
+    return RedirectResponse("/subs?tab=rules&saved=1", status_code=303)
+
+
+@app.post("/subs/config")
+async def subs_config(request: Request):
+    cfg = load_config()
+    form = await request.form()
+    cfg["skip_in_library"] = "skip_in_library" in form
+    cfg["pending_unlock_hours"] = int(form.get("pending_unlock_hours") or 24)
+    cfg["subs_interval_minutes"] = int(form.get("subs_interval_minutes") or 30)
+    save_config(cfg)
+    return RedirectResponse("/subs?tab=config&saved=1", status_code=303)
 
 
 @app.get("/logs")
@@ -262,6 +491,13 @@ def api_tmdb_search(payload: dict):
     mt = (payload or {}).get("media_type", "movie")
     items, err = tmdb.search_ex(q, mt)
     return {"ok": not err, "items": items, "message": err}
+
+
+@app.get("/api/tmdb/detail")
+def api_tmdb_detail(tmdb_id: str, media_type: str = "movie", season: int = 1):
+    detail = tmdb.details(tmdb_id, media_type)
+    total = tmdb.season_episode_count(tmdb_id, season) if media_type == "tv" else 0
+    return {"ok": bool(detail), "item": detail, "total_episodes": total}
 
 
 @app.post("/api/search")

@@ -42,6 +42,7 @@ DEFAULTS: dict = {
     "api_search_enabled": True,
     "rss_enabled": False,
     "rss_interval_minutes": 5,
+    "subs_interval_minutes": 30,
     "rss_filter": {                    # 与 rss/options 对齐
         "media_types": [],
         "categories": [],

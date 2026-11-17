@@ -54,7 +54,12 @@ def do_checkin(force: bool = False) -> dict:
     return {"ok": ok, "message": msg, "mode": mode, "raw": res}
 
 
-def _filter_candidates(items: list[dict], cfg: dict, for_sub: bool = True) -> list[dict]:
+def _filter_candidates(
+    items: list[dict],
+    cfg: dict,
+    for_sub: bool = True,
+    cloud_type: str = "115",
+) -> list[dict]:
     max_points = int(cfg.get("max_unlock_points_sub" if for_sub else "max_unlock_points") or 20)
     only_free = bool(cfg.get("only_free")) if for_sub else False
     out = []
@@ -76,6 +81,10 @@ def _filter_candidates(items: list[dict], cfg: dict, for_sub: bool = True) -> li
             if it.get("media_type") == "tv" and not it.get("episode_numbers"):
                 continue
         out.append(it)
+    if for_sub and cloud_type and cloud_type != "all":
+        preferred = [it for it in out if (it.get("share_kind") or "115") == cloud_type]
+        if preferred:
+            return preferred
     if for_sub and cfg.get("d115_enabled"):
         auto_transfer = [it for it in out if (it.get("share_kind") or "115") == "115"]
         if auto_transfer:
@@ -196,13 +205,20 @@ def run_subscription_search() -> dict:
         media_type = sub.get("media_type") or "movie"
         pattern = cfg.get("tv_filter") if media_type == "tv" else cfg.get("movie_filter")
         if not _match_filter(pattern or "", title):
+            store.update_subscription_status(int(sub["id"]), "filtered", "未通过过滤词", completed=False)
             results.append({"title": title, "ok": False, "message": "未通过过滤词"})
             continue
         data = search_shares(sub.get("tmdb_id"), media_type, int(sub.get("season") or 0))
         if not data.get("ok"):
+            store.update_subscription_status(int(sub["id"]), "error", data.get("message") or "查询失败", completed=False)
             results.append({"title": title, "ok": False, "message": data.get("message")})
             continue
-        candidates = _filter_candidates(data.get("items") or [], cfg, for_sub=True)
+        candidates = _filter_candidates(
+            data.get("items") or [],
+            cfg,
+            for_sub=True,
+            cloud_type=sub.get("cloud_type") or "115",
+        )
         if not candidates:
             lib = data.get("library") or {}
             if lib.get("checked") and lib.get("exists"):
@@ -214,6 +230,12 @@ def run_subscription_search() -> dict:
                     message = "已入库 · 没有可补齐的新分享"
             else:
                 message = "没有符合条件的新分享"
+            store.update_subscription_status(
+                int(sub["id"]),
+                "completed" if lib.get("complete") else "waiting",
+                message,
+                completed=bool(lib.get("complete")),
+            )
             results.append({"title": title, "ok": False, "message": message})
             continue
         best = candidates[0]
@@ -228,6 +250,14 @@ def run_subscription_search() -> dict:
         )
         if r.get("ok"):
             store.set_last_share(int(sub["id"]), str(best.get("share_id")))
+            store.update_subscription_status(int(sub["id"]), "success", "已提交转存", completed=False)
+        else:
+            store.update_subscription_status(
+                int(sub["id"]),
+                "error",
+                r.get("message") or "解锁失败",
+                completed=False,
+            )
         coverage = (
             f"补齐 {best.get('new_episodes_text')} 集 · "
             if best.get("new_episodes_text") else ""

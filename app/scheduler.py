@@ -74,7 +74,11 @@ def start() -> BackgroundScheduler:
     tz = cfg.get("timezone") or "Asia/Shanghai"
     sch = BackgroundScheduler(timezone=tz)
     sch.add_job(tick_checkin, "interval", minutes=10, id="checkin", replace_existing=True)
-    sch.add_job(tick_subscriptions, "interval", minutes=30, id="subs", replace_existing=True)
+    sch.add_job(
+        tick_subscriptions, "interval",
+        minutes=int(cfg.get("subs_interval_minutes") or 30),
+        id="subs", replace_existing=True,
+    )
     sch.add_job(tick_rss, "interval", minutes=int(cfg.get("rss_interval_minutes") or 5), id="rss", replace_existing=True)
     sch.start()
     _scheduler = sch

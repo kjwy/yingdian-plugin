@@ -46,7 +46,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   tmdb_id TEXT,
   media_type TEXT,
   season INTEGER DEFAULT 0,
+  start_episode INTEGER DEFAULT 1,
+  total_episodes INTEGER DEFAULT 0,
+  cloud_type TEXT DEFAULT '115',
+  subscription_url TEXT,
   enabled INTEGER DEFAULT 1,
+  completed INTEGER DEFAULT 0,
+  last_status TEXT DEFAULT 'pending',
+  last_message TEXT,
+  last_checked_at TEXT,
   last_share_id TEXT,
   created_at TEXT NOT NULL
 );
@@ -68,6 +76,20 @@ def init_db() -> None:
             conn.execute("ALTER TABLE unlocks ADD COLUMN season INTEGER DEFAULT 0")
         if "episode" not in columns:
             conn.execute("ALTER TABLE unlocks ADD COLUMN episode TEXT")
+        sub_columns = {row["name"] for row in conn.execute("PRAGMA table_info(subscriptions)").fetchall()}
+        migrations = {
+            "start_episode": "INTEGER DEFAULT 1",
+            "total_episodes": "INTEGER DEFAULT 0",
+            "cloud_type": "TEXT DEFAULT '115'",
+            "subscription_url": "TEXT",
+            "completed": "INTEGER DEFAULT 0",
+            "last_status": "TEXT DEFAULT 'pending'",
+            "last_message": "TEXT",
+            "last_checked_at": "TEXT",
+        }
+        for name, declaration in migrations.items():
+            if name not in sub_columns:
+                conn.execute(f"ALTER TABLE subscriptions ADD COLUMN {name} {declaration}")
 
 
 def _now() -> str:
@@ -158,11 +180,27 @@ def recent_tv_pending(tmdb_id: str | int, hours: int = 24) -> list[dict]:
 
 
 # ---------- 订阅 ----------
-def add_subscription(title: str, tmdb_id: str, media_type: str, season: int = 0) -> None:
+def add_subscription(
+    title: str,
+    tmdb_id: str,
+    media_type: str,
+    season: int = 0,
+    start_episode: int = 1,
+    total_episodes: int = 0,
+    cloud_type: str = "115",
+    subscription_url: str = "",
+) -> None:
     with _conn() as conn:
         conn.execute(
-            "INSERT INTO subscriptions(title, tmdb_id, media_type, season, enabled, created_at) VALUES(?,?,?,?,?,?)",
-            (title, str(tmdb_id), media_type, season, 1, _now()),
+            "INSERT INTO subscriptions("
+            "title, tmdb_id, media_type, season, start_episode, total_episodes, "
+            "cloud_type, subscription_url, enabled, completed, last_status, created_at"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                title, str(tmdb_id), media_type, season, max(1, int(start_episode or 1)),
+                max(0, int(total_episodes or 0)), cloud_type or "115",
+                subscription_url or "", 1, 0, "pending", _now(),
+            ),
         )
 
 
@@ -185,3 +223,22 @@ def toggle_subscription(sid: int, enabled: bool) -> None:
 def set_last_share(sid: int, share_id: str) -> None:
     with _conn() as conn:
         conn.execute("UPDATE subscriptions SET last_share_id = ? WHERE id = ?", (str(share_id), sid))
+
+def update_subscription_status(
+    sid: int,
+    status: str,
+    message: str = "",
+    completed: bool | None = None,
+) -> None:
+    with _conn() as conn:
+        if completed is None:
+            conn.execute(
+                "UPDATE subscriptions SET last_status = ?, last_message = ?, last_checked_at = ? WHERE id = ?",
+                (status, message, _now(), sid),
+            )
+        else:
+            conn.execute(
+                "UPDATE subscriptions SET last_status = ?, last_message = ?, last_checked_at = ?, completed = ? WHERE id = ?",
+                (status, message, _now(), 1 if completed else 0, sid),
+            )
+

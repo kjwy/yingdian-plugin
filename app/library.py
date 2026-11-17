@@ -210,6 +210,28 @@ def status(tmdb_id: str | int, media_type: str = "movie", season: int = 0) -> di
     return result
 
 
+def quick_status(tmdb_id: str | int, media_type: str = "movie") -> dict:
+    """榜单列表专用：只判断是否存在，不读取分集。"""
+    cfg = _cfg()
+    if not cfg.get("emby_enabled") or not cfg.get("emby_host") or not cfg.get("emby_api_key"):
+        return {"checked": False, "exists": False}
+    key = ("quick", str(tmdb_id), media_type)
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _CACHE.get(key)
+        if cached and cached[0] > now:
+            return dict(cached[1])
+    item, err = _find_item(tmdb_id, media_type, cfg)
+    result = {
+        "checked": not bool(err),
+        "exists": bool(item),
+        "message": err or ("已入库" if item else "未入库"),
+    }
+    with _CACHE_LOCK:
+        _CACHE[key] = (now + _CACHE_TTL, dict(result))
+    return result
+
+
 def clear_cache() -> None:
     with _CACHE_LOCK:
         _CACHE.clear()

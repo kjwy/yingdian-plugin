@@ -1,25 +1,62 @@
 {% extends "base.html" %}
-{% block title %}榜单 · {{ label }}{% endblock %}
+{% block title %}发现 · {{ label }}{% endblock %}
 {% block content %}
-<div class="section-head"><h2>榜单 · {{ label }}</h2></div>
-<div class="panel">
-  <div class="row" style="gap:8px;margin-bottom:10px">
-    <a class="btn btn-sm {{ 'primary' if source == 'tmdb' }}" href="/rankings?source=tmdb&kind=trending">TMDB 榜单</a>
-    <a class="btn btn-sm {{ 'primary' if source == 'douban' }}" href="/rankings?source=douban&kind=douban_movie_top">豆瓣榜单</a>
+<div class="section-head"><h2>发现与榜单</h2><span>{{ label }}</span></div>
+
+<div class="panel rank-panel">
+  <div class="source-tabs">
+    <a class="{{ 'on' if source == 'tmdb' }}" href="/rankings?source=tmdb&media_type={{ current.media_type }}">TMDB</a>
+    <a class="{{ 'on' if source == 'douban' }}" href="/rankings?source=douban&media_type={{ current.media_type }}">豆瓣</a>
+    <a class="{{ 'on' if source == 'douban_rank' }}" href="/rankings?source=douban_rank&kind=douban_movie_top">豆瓣榜单</a>
+    <a class="{{ 'on' if source == 'douban_list' }}" href="/rankings?source=douban_list{% if doulist_id %}&doulist_id={{ doulist_id }}{% endif %}">豆瓣片单</a>
   </div>
-  <div class="row" style="gap:8px">
-    {% for k, lbl in kinds %}
-    <a class="btn btn-sm {{ 'primary' if k == kind }}" href="/rankings?source={{ source }}&kind={{ k }}">{{ lbl }}</a>
+
+  {% if source == 'douban_rank' %}
+  <div class="filter-line">
+    <span class="filter-label">榜单</span>
+    <div class="filter-pills">
+      {% for k, lbl in rank_kinds %}
+      <a class="filter-pill {{ 'active' if k == kind }}" href="/rankings?source=douban_rank&kind={{ k }}">{{ lbl }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if source == 'douban_list' %}
+  <form class="doulist-form" method="get" action="/rankings">
+    <input type="hidden" name="source" value="douban_list">
+    <input class="inp" name="doulist_id" value="{{ doulist_id }}" placeholder="输入公开豆瓣片单 ID">
+    <button class="btn primary">读取片单</button>
+  </form>
+  {% endif %}
+
+  <details class="rank-filters" open>
+    <summary>筛选条件</summary>
+    {% for group in filter_groups %}
+      {% if source not in ('douban_rank', 'douban_list') or group.name == 'status' %}
+      <div class="filter-line">
+        <span class="filter-label">{{ group.label }}</span>
+        <div class="filter-pills">
+          {% for c in group.choices %}
+          <a class="filter-pill {{ 'active' if c.active }}" href="{{ c.href }}">{{ c.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     {% endfor %}
-  </div>
+  </details>
+
   {% if err %}
   <div class="item"><span class="m" style="color:#f87171">❌ {{ err }}</span></div>
   {% elif items %}
-  <div class="grid" style="margin-top:14px">
+  <div class="grid rank-grid">
     {% for it in items %}
     <a class="card" href="{{ it.search_url }}">
       <div class="card-poster">
         {% if it.poster %}<img src="{{ it.proxy_poster or it.poster }}" loading="lazy" alt="{{ it.title }}">{% else %}<div class="no-img">暂无海报</div>{% endif %}
+        {% if it.library_checked %}
+        <span class="library-badge {{ 'in' if it.library_exists else 'out' }}">{{ "已入库" if it.library_exists else "未入库" }}</span>
+        {% endif %}
       </div>
       <div class="card-body">
         <div class="t">{{ it.title }}</div>
@@ -33,7 +70,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty">暂无数据</div>
+  <div class="empty">当前筛选条件下暂无数据</div>
   {% endif %}
 </div>
-{% endblock %}
+{% endblock %}
