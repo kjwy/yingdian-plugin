@@ -101,7 +101,7 @@ class DianClient:
         SDK = _try_import_sdk()
         if SDK is None:
             raise RuntimeError(
-                "未安装影癫官方 SDK（dian115_openapi）。请先申请开发者，下载 Python SDK 并 pip install，"
+                "未安装官方 SDK。请先申请开发者，下载 Python SDK 并安装，"
                 f"或开启模拟模式。导入错误：{SDK_IMPORT_ERROR}"
             )
         self._sdk = SDK(base_url=base_url, api_key=api_key)
@@ -126,20 +126,54 @@ class DianClient:
         return self._sdk.rss_options(payload or {}) if hasattr(self._sdk, "rss_options") else {}
 
 
+def current_mode(cfg: dict) -> str:
+    """mock | sdk | browser（兼容旧的 mock_mode 布尔开关）"""
+    mode = (cfg.get("mode") or "").strip().lower()
+    if mode in ("mock", "sdk", "browser"):
+        return mode
+    return "mock" if cfg.get("mock_mode") else "sdk"
+
+
 def get_client() -> tuple[Any, str]:
-    """返回 (client, mode)，mode ∈ {sdk, mock}"""
+    """返回 (client, mode)，mode ∈ {mock, sdk, browser}"""
     cfg = load_config()
-    if cfg.get("mock_mode"):
+    mode = current_mode(cfg)
+    if mode == "mock":
         return MockClient(), "mock"
+    if mode == "browser":
+        from .browser_client import BrowserClient
+
+        return (
+            BrowserClient(
+                cfg.get("dian_base_url", "https://m.dian115.com"),
+                cfg.get("cdp_host", "127.0.0.1"),
+                int(cfg.get("cdp_port") or 9222),
+            ),
+            "browser",
+        )
     return DianClient(cfg.get("dian_base_url", ""), cfg.get("dian_api_key", "")), "sdk"
 
 
 def client_status() -> dict:
     cfg = load_config()
-    if cfg.get("mock_mode"):
-        return {"mode": "mock", "ready": True, "message": "模拟模式（不会调用真实接口）"}
+    mode = current_mode(cfg)
+    if mode == "mock":
+        return {"mode": "mock", "ready": True, "message": "模拟模式", "detail": "假数据，仅用于试用界面"}
+    if mode == "browser":
+        from .cdp import browser_reachable, find_logged_in_target
+
+        host = cfg.get("cdp_host", "127.0.0.1")
+        port = int(cfg.get("cdp_port") or 9222)
+        ok, info = browser_reachable(host, port)
+        if not ok:
+            return {"mode": "browser", "ready": False, "message": "浏览器未连接", "detail": f"CDP {host}:{port} 连不上：{info}"}
+        target = find_logged_in_target(host, port, cfg.get("dian_base_url", ""))
+        if not target:
+            return {"mode": "browser", "ready": False, "message": "需要登录影癫", "detail": "浏览器已连接，但没有已登录的影癫标签页"}
+        return {"mode": "browser", "ready": True, "message": "就绪", "detail": f"{info} · 已找到登录标签页"}
     if _try_import_sdk() is None:
-        return {"mode": "sdk", "ready": False, "message": f"未安装官方 SDK：{SDK_IMPORT_ERROR}"}
+        return {"mode": "sdk", "ready": False, "message": "未安装 SDK", "detail": SDK_IMPORT_ERROR}
     if not cfg.get("dian_api_key"):
-        return {"mode": "sdk", "ready": False, "message": "未填写 OpenAPI Key"}
-    return {"mode": "sdk", "ready": True, "message": "已就绪"}
+        return {"mode": "sdk", "ready": False, "message": "未填写 Key", "detail": "请在设置里填写 OpenAPI Key"}
+    return {"mode": "sdk", "ready": True, "message": "就绪", "detail": "官方 OpenAPI SDK"}
+

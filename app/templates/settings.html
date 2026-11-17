@@ -1,88 +1,143 @@
 {% extends "base.html" %}
 {% block content %}
 {% if request.query_params.get("saved") %}<div class="notice ok">已保存</div>{% endif %}
+
 <form method="post" action="/settings">
-<div class="panel">
-  <div class="head"><h3>影癫 OpenAPI</h3></div>
-  <label>服务地址<input class="inp" name="dian_base_url" value="{{ cfg.dian_base_url }}"></label>
-  <label>OpenAPI Key（当前：{{ cfg.dian_api_key_masked or '未填写' }}）<input class="inp" name="dian_api_key" placeholder="留空 = 不修改"></label>
-  <label class="chk"><input type="checkbox" name="mock_mode" {{ "checked" if cfg.mock_mode }}> 模拟模式（不调用真实接口，用于联调）</label>
-</div>
 
 <div class="panel">
-  <div class="head"><h3>签到</h3></div>
-  <label class="chk"><input type="checkbox" name="checkin_enabled" {{ "checked" if cfg.checkin_enabled }}> 启用定时签到</label>
-  <label>签到模式
-    <select class="inp" name="checkin_mode">
-      <option value="normal" {{ "selected" if cfg.checkin_mode == "normal" }}>普通签到</option>
-      <option value="lucky" {{ "selected" if cfg.checkin_mode == "lucky" }}>幸运签到</option>
+  <div class="head"><h3>运行模式</h3></div>
+  <label>获取资源的方式
+    <select class="inp" name="mode">
+      <option value="browser" {{ "selected" if cfg.mode != "sdk" }}>浏览器自动化</option>
+      <option value="sdk" {{ "selected" if cfg.mode == "sdk" }}>官方 SDK</option>
     </select>
   </label>
-  <div class="row">
-    <label>随机时间窗口起（小时）<input class="inp" type="number" name="checkin_window_start" value="{{ cfg.checkin_window_start }}"></label>
-    <label>随机时间窗口止（小时）<input class="inp" type="number" name="checkin_window_end" value="{{ cfg.checkin_window_end }}"></label>
-  </div>
-  <label class="chk"><input type="checkbox" name="checkin_notify" {{ "checked" if cfg.checkin_notify }}> 签到结果推送 Telegram</label>
-</div>
-
-<div class="panel">
-  <div class="head"><h3>解锁与筛选</h3></div>
-  <div class="row">
-    <label>解锁积分上限<input class="inp" type="number" name="max_unlock_points" value="{{ cfg.max_unlock_points }}"></label>
-    <label>解锁速率限制（次/分钟）<input class="inp" type="number" name="unlock_rate_per_minute" value="{{ cfg.unlock_rate_per_minute }}"></label>
-  </div>
-  <div class="row">
-    <label>电影过滤词（正则）<input class="inp" name="movie_filter" value="{{ cfg.movie_filter }}"></label>
-    <label>电视剧过滤词（正则）<input class="inp" name="tv_filter" value="{{ cfg.tv_filter }}"></label>
-  </div>
-  <div class="row">
-    <label>订阅解锁积分上限<input class="inp" type="number" name="max_unlock_points_sub" value="{{ cfg.max_unlock_points_sub }}"></label>
-    <label class="chk"><input type="checkbox" name="only_free" {{ "checked" if cfg.only_free }}> 只订阅免费资源</label>
-    <label class="chk"><input type="checkbox" name="unlock_official" {{ "checked" if cfg.unlock_official }}> 解锁官组资源</label>
-  </div>
-  <label class="chk"><input type="checkbox" name="api_search_enabled" {{ "checked" if cfg.api_search_enabled }}> 启用 API 搜索（订阅无结果时用 list-shares 直查）</label>
-</div>
-
-<div class="panel">
-  <div class="head"><h3>RSS 增量订阅</h3></div>
-  <label class="chk"><input type="checkbox" name="rss_enabled" {{ "checked" if cfg.rss_enabled }}> 启用 RSS 订阅</label>
-  <label>轮询间隔（分钟）<input class="inp" type="number" name="rss_interval_minutes" value="{{ cfg.rss_interval_minutes }}"></label>
-  <div class="hint">RSS 过滤条件（分类/地区/TAG）可在配置文件中编辑 rss_filter 字段。</div>
-</div>
-
-<div class="panel">
-  <div class="head"><h3>Telegram 推送（Symedia 115助手）</h3></div>
-  <label>Bot Token（当前：{{ cfg.tg_bot_token_masked or '未填写' }}）<input class="inp" name="tg_bot_token" placeholder="留空 = 不修改"></label>
-  <label>目标群 Chat ID<input class="inp" name="tg_chat_id" value="{{ cfg.tg_chat_id }}" placeholder="-100xxxxxxxxxx"></label>
-  <label>消息模板<input class="inp" name="tg_template" value="{{ cfg.tg_template }}"></label>
-  <label>HTTP 代理（可选，NAS 直连不了 Telegram 时填，如 http://192.168.1.2:7890）<input class="inp" name="tg_proxy" value="{{ cfg.tg_proxy }}" placeholder="留空＝直连"></label>
   <div class="row" style="align-items:center">
-    <button type="button" class="btn" id="btn-tg-check">诊断连接</button>
-    <button type="button" class="btn primary" id="btn-tg-test">测试推送</button>
+    <button type="button" class="btn" id="btn-client-check">诊断</button>
+    <span id="client-check-msg" class="hint"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="head"><h3>Emby 入库检测</h3></div>
+  <label class="chk"><input type="checkbox" name="emby_enabled" {{ "checked" if cfg.emby_enabled }}> 启用入库检测</label>
+  <label class="chk"><input type="checkbox" name="skip_in_library" {{ "checked" if cfg.skip_in_library }}> 自动跳过已入库和正在转存的集数</label>
+  <div class="row">
+    <label>Emby 地址<input class="inp" name="emby_host" value="{{ cfg.emby_host }}" placeholder="http://192.168.1.6:8096"></label>
+    <label>Emby API Key<input class="inp" type="password" name="emby_api_key" placeholder="{{ cfg.emby_api_key_masked or '留空则不修改' }}"></label>
+  </div>
+  <label>防重复转存时间
+    <input class="inp" type="number" name="pending_unlock_hours" value="{{ cfg.pending_unlock_hours }}" min="1" max="168">
+  </label>
+  <div class="row" style="align-items:center">
+    <button type="button" class="btn" id="btn-emby-check">测试 Emby</button>
+    <span id="emby-check-msg" class="hint"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="head"><h3>转存与推送</h3></div>
+
+  <label class="chk"><input type="checkbox" name="d115_enabled" {{ "checked" if cfg.d115_enabled }}> 解锁后直接转存到 115 网盘</label>
+  <label>115 Cookie
+    <textarea class="inp" name="d115_cookie" rows="2" placeholder="UID=xxx; CID=xxx; SEID=xxx; KID=xxx">{{ cfg.d115_cookie }}</textarea>
+  </label>
+  <label>目标目录
+    <div class="row" style="gap:8px">
+      <input class="inp" name="d115_cid" id="d115-cid" value="{{ cfg.d115_cid }}" placeholder="0" style="max-width:220px">
+      <button type="button" class="btn" id="btn-115-folders">选择文件夹</button>
+    </div>
+  </label>
+  <div class="row"><select class="inp" id="d115-folder-pick" style="display:none"></select></div>
+  <div class="row" style="align-items:center">
+    <button type="button" class="btn" id="btn-115-check">测试 Cookie</button>
+    <span id="d115-check-msg" class="hint"></span>
+  </div>
+
+  <hr>
+  <label class="chk"><input type="checkbox" name="tg_push_enabled" {{ "checked" if cfg.tg_push_enabled }}> 解锁后在 Telegram 群发通知</label>
+  <label>Bot Token<input class="inp" name="tg_bot_token" placeholder="留空则不修改"></label>
+  <label>群 Chat ID<input class="inp" name="tg_chat_id" value="{{ cfg.tg_chat_id }}" placeholder="-100xxxxxxxxxx"></label>
+  <div class="row" style="align-items:center">
+    <button type="button" class="btn" id="btn-tg-check">诊断</button>
+    <button type="button" class="btn" id="btn-tg-test">发测试消息</button>
     <span id="tg-test-msg" class="hint"></span>
   </div>
-  <div class="hint">做法：@BotFather 建一个机器人拿 token → 把这个机器人 和 Symedia 115助手都拉进同一个 TG 群 → 群里给它发条消息 → 用 getUpdates 查群 chat id（-100 开头）。插件往群里发 115 链接，Symedia 助手收到就转存。</div>
 </div>
 
-<div class="panel">
-  <div class="head"><h3>TMDB（片名搜索用，可选）</h3></div>
-  <label>TMDB API Key（当前：{{ cfg.tmdb_api_key_masked or '未填写' }}）<input class="inp" name="tmdb_api_key" placeholder="留空 = 不修改"></label>
-  <label>TMDB 代理（留空则沿用上面的 Telegram 代理）<input class="inp" name="tmdb_proxy" value="{{ cfg.tmdb_proxy }}" placeholder="如 http://192.168.1.2:7890"></label>
-  <label>API 域名<input class="inp" name="tmdb_api_base" value="{{ cfg.tmdb_api_base }}" placeholder="https://api.themoviedb.org/3"></label>
-  <label>图片域名<input class="inp" name="tmdb_image_base" value="{{ cfg.tmdb_image_base }}" placeholder="https://image.tmdb.org/t/p"></label>
-  <div class="row" style="align-items:center">
-    <button type="button" class="btn" id="btn-tmdb-check">诊断 TMDB</button>
-    <span id="tmdb-check-msg" class="hint"></span>
+<details class="panel">
+  <summary><h3>TMDB</h3></summary>
+  <div style="margin-top:14px">
+    <label>API Key<input class="inp" name="tmdb_api_key" placeholder="留空则不修改"></label>
+    <div class="row" style="align-items:center">
+      <button type="button" class="btn" id="btn-tmdb-check">诊断 TMDB</button>
+      <span id="tmdb-check-msg" class="hint"></span>
+    </div>
   </div>
-  <div class="hint">国内直连 TMDB 常不通：可填代理，或把 API 域名换成镜像（如 https://api.tmdb.org/3）。</div>
-</div>
+</details>
 
-<div class="panel">
-  <div class="head"><h3>其它</h3></div>
-  <label>时区<input class="inp" name="timezone" value="{{ cfg.timezone }}"></label>
-</div>
+<details class="panel">
+  <summary><h3>签到与订阅</h3></summary>
+  <div style="margin-top:14px">
+    <label class="chk"><input type="checkbox" name="checkin_enabled" {{ "checked" if cfg.checkin_enabled }}> 启用定时签到</label>
+    <label>签到模式
+      <select class="inp" name="checkin_mode">
+        <option value="normal" {{ "selected" if cfg.checkin_mode == "normal" }}>普通签到</option>
+        <option value="lucky" {{ "selected" if cfg.checkin_mode == "lucky" }}>幸运签到</option>
+      </select>
+    </label>
+    <div class="row">
+      <label>随机时间起<input class="inp" type="number" name="checkin_window_start" value="{{ cfg.checkin_window_start }}"></label>
+      <label>随机时间止<input class="inp" type="number" name="checkin_window_end" value="{{ cfg.checkin_window_end }}"></label>
+    </div>
+    <label class="chk"><input type="checkbox" name="checkin_notify" {{ "checked" if cfg.checkin_notify }}> 签到结果推送 Telegram</label>
+    <hr>
+    <div class="row">
+      <label>解锁积分上限<input class="inp" type="number" name="max_unlock_points" value="{{ cfg.max_unlock_points }}"></label>
+      <label>订阅积分上限<input class="inp" type="number" name="max_unlock_points_sub" value="{{ cfg.max_unlock_points_sub }}"></label>
+      <label>解锁速率<input class="inp" type="number" name="unlock_rate_per_minute" value="{{ cfg.unlock_rate_per_minute }}"></label>
+    </div>
+    <label class="chk"><input type="checkbox" name="only_free" {{ "checked" if cfg.only_free }}> 只订阅免费资源</label>
+    <label class="chk"><input type="checkbox" name="unlock_official" {{ "checked" if cfg.unlock_official }}> 解锁官组资源</label>
+    <div class="row">
+      <label>电影过滤词<input class="inp" name="movie_filter" value="{{ cfg.movie_filter }}"></label>
+      <label>电视剧过滤词<input class="inp" name="tv_filter" value="{{ cfg.tv_filter }}"></label>
+    </div>
+    <hr>
+    <label class="chk"><input type="checkbox" name="rss_enabled" {{ "checked" if cfg.rss_enabled }}> 启用 RSS 增量订阅</label>
+    <label>RSS 轮询间隔<input class="inp" type="number" name="rss_interval_minutes" value="{{ cfg.rss_interval_minutes }}"></label>
+    <label class="chk"><input type="checkbox" name="api_search_enabled" {{ "checked" if cfg.api_search_enabled }}> 订阅无结果时用 API 直查</label>
+  </div>
+</details>
+
+<details class="panel">
+  <summary><h3>高级设置</h3></summary>
+  <div style="margin-top:14px">
+    <div class="row">
+      <label>浏览器 CDP 地址<input class="inp" name="cdp_host" value="{{ cfg.cdp_host }}"></label>
+      <label>CDP 端口<input class="inp" type="number" name="cdp_port" value="{{ cfg.cdp_port }}"></label>
+    </div>
+    <label>影癫站点<input class="inp" name="dian_base_url" value="{{ cfg.dian_base_url }}"></label>
+    <div class="row">
+      <label>影癫账号<input class="inp" name="dian_email" value="{{ cfg.dian_email }}" placeholder="用于登录失效时自动重登"></label>
+      <label>影癫密码<input class="inp" name="dian_password" type="password" placeholder="留空则不修改"></label>
+    </div>
+    <label>OpenAPI Key<input class="inp" name="dian_api_key" placeholder="留空则不修改"></label>
+    <label>Telegram 消息模板<input class="inp" name="tg_template" value="{{ cfg.tg_template }}"></label>
+    <div class="row">
+      <label>Telegram 代理<input class="inp" name="tg_proxy" value="{{ cfg.tg_proxy }}"></label>
+      <label>TMDB 代理<input class="inp" name="tmdb_proxy" value="{{ cfg.tmdb_proxy }}"></label>
+    </div>
+    <div class="row">
+      <label>TMDB API 域名<input class="inp" name="tmdb_api_base" value="{{ cfg.tmdb_api_base }}"></label>
+      <label>TMDB 图片域名<input class="inp" name="tmdb_image_base" value="{{ cfg.tmdb_image_base }}"></label>
+    </div>
+    <label>时区<input class="inp" name="timezone" value="{{ cfg.timezone }}"></label>
+  </div>
+</details>
 
 <button class="btn primary big" type="submit">保存设置</button>
+<a class="btn" href="/" style="margin-left:10px">返回仪表盘</a>
 </form>
 {% endblock %}
 

@@ -15,7 +15,7 @@ RUN pip install -i ${PIP_INDEX} -r requirements.txt
 
 # 影癫官方 OpenAPI v2 SDK（可选）：把 .whl 放进 sdk/ 目录即可自动安装
 COPY sdk/ /app/sdk/
-RUN if ls /app/sdk/*.whl >/dev/null 2>&1; then pip install -i ${PIP_INDEX} --no-cache-dir /app/sdk/*.whl; else echo "未提供官方 SDK，使用模拟模式"; fi
+RUN if ls /app/sdk/*.whl >/dev/null 2>&1; then pip install -i ${PIP_INDEX} --no-cache-dir /app/sdk/*.whl; else echo "未提供官方 SDK，使用浏览器自动化模式"; fi
 
 COPY app ./app
 

@@ -15,14 +15,16 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="影癫插件">
 <meta name="application-name" content="影癫插件">
-<link rel="stylesheet" href="/static/style.css?v=4">
+<link rel="stylesheet" href="/static/style.css?v=21">
 </head>
 <body>
 <header class="top">
   <div class="inner">
     <div class="brand">影癫<em>插件</em> <span class="ver">for Symedia</span></div>
     <nav class="nav">
-      <a href="/" class="{{ 'on' if request.url.path == '/' }}">仪表盘</a>
+      <a href="/" class="{{ 'on' if request.url.path == '/' }}">搜索</a>
+      <a href="/rankings" class="{{ 'on' if request.url.path == '/rankings' }}">榜单</a>
+      <a href="/dashboard" class="{{ 'on' if request.url.path == '/dashboard' }}">仪表盘</a>
       <a href="/subs" class="{{ 'on' if request.url.path == '/subs' }}">订阅</a>
       <a href="/logs" class="{{ 'on' if request.url.path == '/logs' }}">日志</a>
       <a href="/settings" class="{{ 'on' if request.url.path == '/settings' }}">设置</a>
@@ -35,17 +37,20 @@
 
 <main class="wrap">
 {% block content %}{% endblock %}
-<footer class="foot">影癫插件 v0.1.3 · 仅供个人媒体自动化使用</footer>
+<footer class="foot">{{ site_name }} v{{ app_version }} · 仅供个人媒体自动化使用</footer>
 </main>
 
-<!-- 手机端底部导航（桌面端隐藏） -->
+<!-- 手机端底部导航 -->
 <nav class="tabbar">
-  <a href="/" class="{{ 'on' if request.url.path == '/' }}"><span class="ico">📊</span>仪表盘</a>
+  <a href="/" class="{{ 'on' if request.url.path == '/' }}"><span class="ico">🔍</span>搜索</a>
+  <a href="/rankings" class="{{ 'on' if request.url.path == '/rankings' }}"><span class="ico">🏆</span>榜单</a>
+  <a href="/dashboard" class="{{ 'on' if request.url.path == '/dashboard' }}"><span class="ico">📊</span>仪表盘</a>
   <a href="/subs" class="{{ 'on' if request.url.path == '/subs' }}"><span class="ico">🎯</span>订阅</a>
   <a href="/logs" class="{{ 'on' if request.url.path == '/logs' }}"><span class="ico">📜</span>日志</a>
   <a href="/settings" class="{{ 'on' if request.url.path == '/settings' }}"><span class="ico">⚙️</span>设置</a>
 </nav>
 
-<script src="/static/app.js?v=4"></script>
+<script src="/static/app.js?v=21"></script>
 </body>
-</html>
+</html>
+

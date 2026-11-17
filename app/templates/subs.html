@@ -11,7 +11,7 @@
 
   <hr>
   <form method="post" action="/subs/add" class="row">
-    <input class="inp" name="title" placeholder="标题（可选）">
+    <input class="inp" name="title" placeholder="标题">
     <input class="inp" name="tmdb_id" placeholder="TMDB ID" required>
     <select class="inp" name="media_type"><option value="movie">电影</option><option value="tv">剧集</option></select>
     <input class="inp" name="season" type="number" value="0" placeholder="季">
@@ -20,7 +20,8 @@
 </div>
 
 <div class="panel">
-  <div class="head"><h3>订阅列表（{{ subs|length }}）</h3><button class="btn" id="btn-subs-run2">立即执行搜索</button></div>
+  <div class="head"><h3>订阅列表 · {{ subs|length }}</h3><button class="btn" id="btn-subs-run2">立即执行搜索</button></div>
+  <div class="hint" style="margin-bottom:10px">剧集订阅优先补齐未入库集数，已入库和正在转存的内容会自动跳过。</div>
   {% if subs %}
   <table>
     <tr><th>标题</th><th>TMDB</th><th>类型</th><th>季</th><th>状态</th><th>上次 share</th><th>操作</th></tr>
@@ -40,4 +41,5 @@
   </table>
   {% else %}<div class="empty">还没有订阅，先用上面搜索添加</div>{% endif %}
 </div>
-{% endblock %}
+{% endblock %}
+

@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS unlocks (
   resource_id TEXT,
   tmdb_id TEXT,
   media_type TEXT,
+  season INTEGER DEFAULT 0,
   title TEXT,
+  episode TEXT,
   tag TEXT,
   size TEXT,
   cost INTEGER,
@@ -61,6 +63,11 @@ def _conn() -> sqlite3.Connection:
 def init_db() -> None:
     with _conn() as conn:
         conn.executescript(SCHEMA)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(unlocks)").fetchall()}
+        if "season" not in columns:
+            conn.execute("ALTER TABLE unlocks ADD COLUMN season INTEGER DEFAULT 0")
+        if "episode" not in columns:
+            conn.execute("ALTER TABLE unlocks ADD COLUMN episode TEXT")
 
 
 def _now() -> str:
@@ -106,7 +113,10 @@ def list_checkins(limit: int = 50) -> list[dict]:
 
 # ---------- 解锁 ----------
 def add_unlock(**kw: Any) -> None:
-    fields = ["share_id", "resource_id", "tmdb_id", "media_type", "title", "tag", "size", "cost", "link", "ok", "message"]
+    fields = [
+        "share_id", "resource_id", "tmdb_id", "media_type", "season", "title", "episode",
+        "tag", "size", "cost", "link", "ok", "message",
+    ]
     values = [kw.get(f) for f in fields]
     with _conn() as conn:
         conn.execute(
@@ -132,6 +142,19 @@ def already_unlocked(share_id: str | int) -> bool:
     with _conn() as conn:
         row = conn.execute("SELECT 1 FROM unlocks WHERE ok = 1 AND share_id = ? LIMIT 1", (str(share_id),)).fetchone()
         return row is not None
+
+
+def recent_tv_pending(tmdb_id: str | int, hours: int = 24) -> list[dict]:
+    """最近已解锁/转存中的剧集，防止 Emby 尚未刷新时重复解锁。"""
+    since = (datetime.now() - timedelta(hours=max(1, int(hours)))).strftime("%Y-%m-%d %H:%M:%S")
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT season, episode, created_at FROM unlocks "
+            "WHERE ok = 1 AND media_type = 'tv' AND tmdb_id = ? AND created_at >= ? "
+            "AND episode IS NOT NULL AND episode != '' ORDER BY id DESC",
+            (str(tmdb_id), since),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # ---------- 订阅 ----------

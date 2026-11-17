@@ -5,11 +5,38 @@ services:
     container_name: yingdian-plugin
     restart: unless-stopped
     ports:
-      # 宿主机端口:容器端口（我用的是 8909，若冲突改冒号前面的数字）
       - "8909:8899"
     volumes:
       - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
-      # 先用模拟模式跑通界面，填好 Key + 装好 SDK 后改成 0
-      - YDP_MOCK=1
+      - YDP_MODE=browser
+      - YDP_CDP_HOST=browser
+      - YDP_CDP_PORT=9223
+    depends_on:
+      - browser
+
+  # 浏览器容器：noVNC 登录影癫，插件通过 CDP(9223) 接管标签页
+  browser:
+    build:
+      context: ./browser
+      args:
+        CHROMIUM_URL: ${CHROMIUM_URL:-https://cdn.npmmirror.com/binaries/playwright/builds/chromium/1148/chromium-linux.zip}
+    image: yingdian-browser:latest
+    container_name: yingdian-browser
+    restart: unless-stopped
+    shm_size: "1gb"
+    ports:
+      - "6080:6080"   # noVNC：http://NAS-IP:6080/vnc.html
+      - "9222:9223"   # CDP（外部访问）：http://NAS-IP:9222/json/version
+      - "6081:6081"   # 诊断日志：http://NAS-IP:6081/chromium.log
+    volumes:
+      - ./browser-profile:/profile
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9223/json/version >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

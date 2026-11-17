@@ -5,4 +5,5 @@ data/
 config.json
 .env
 *.db
-sdk/*.whl
+sdk/*.whl
+*.zip

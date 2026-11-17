@@ -35,7 +35,7 @@ def check() -> tuple[bool, str]:
             data = r.json()
         if data.get("ok"):
             bot = data.get("result") or {}
-            extra = f"（代理：{proxy}）" if proxy else "（直连）"
+            extra = f"· 代理 {proxy}" if proxy else "· 直连"
             return True, f"连接正常：@{bot.get('username')} {extra}"
         return False, f"Token 无效：{data.get('description', '')}"
     except Exception as exc:  # noqa: BLE001
@@ -45,8 +45,15 @@ def check() -> tuple[bool, str]:
 
 def send(text: str) -> tuple[bool, str]:
     cfg = load_config()
-    token = (cfg.get("tg_bot_token") or "").strip()
     chat = (cfg.get("tg_chat_id") or "").strip()
+
+    # 优先用「你的 Telegram 账号」发送（Symedia 只处理真人账号的消息）
+    if cfg.get("tg_userbot_session") and chat:
+        from .userbot import send_as_user
+
+        return send_as_user(chat, text)
+
+    token = (cfg.get("tg_bot_token") or "").strip()
     if not token or not chat:
         return False, "未配置 Telegram bot token / chat id"
     try:
@@ -60,7 +67,7 @@ def send(text: str) -> tuple[bool, str]:
             return True, "已发送到 Telegram"
         return False, f"Telegram 返回错误: {data.get('description', '')}"
     except Exception as exc:  # noqa: BLE001
-        return False, f"发送失败（网络？）：{type(exc).__name__}: {exc}"
+        return False, f"发送失败：{type(exc).__name__}: {exc}"
 
 
 def send_transfer(title: str, link: str, password: str = "") -> tuple[bool, str]:
@@ -69,4 +76,5 @@ def send_transfer(title: str, link: str, password: str = "") -> tuple[bool, str]
     text = tpl.replace("{title}", title or "影癫资源").replace("{link}", link)
     if password and password not in text:
         text += f"\n提取码：{password}"
-    return send(text)
+    return send(text)
+

@@ -11,9 +11,17 @@ CONFIG_FILE = DATA_DIR / "config.json"
 DB_FILE = DATA_DIR / "plugin.db"
 
 DEFAULTS: dict = {
+    # 运行模式：mock（模拟）| sdk（官方 OpenAPI）| browser（浏览器自动化）
+    "mode": os.getenv("YDP_MODE", "browser"),
+    # 浏览器模式用的 CDP 地址（NAS 上指向 browser 容器）
+    "cdp_host": os.getenv("YDP_CDP_HOST", "127.0.0.1"),
+    "cdp_port": int(os.getenv("YDP_CDP_PORT", "9222")),
     # 影癫 OpenAPI
     "dian_base_url": os.getenv("DIAN_BASE_URL", "https://m.dian115.com"),
     "dian_api_key": "",
+    # 影癫账号，用于登录失效时自动重新登录
+    "dian_email": "",
+    "dian_password": "",
     # 签到
     "checkin_enabled": True,
     "checkin_mode": "normal",          # normal | lucky
@@ -41,6 +49,18 @@ DEFAULTS: dict = {
         "tags": {},
     },
     # Telegram 推送（Symedia 115助手 所在群）
+    # 115 直连转存
+    "d115_enabled": False,
+    "d115_cookie": "",
+    "d115_cid": "0",
+    # Emby 入库检测：避免重复解锁已入库或正在转存的集数
+    "emby_enabled": True,
+    "emby_host": "",
+    "emby_api_key": "",
+    "skip_in_library": True,
+    "pending_unlock_hours": 24,
+    # 是否同时推送 Telegram（Symedia 只认真人消息，建议关）
+    "tg_push_enabled": True,
     "tg_bot_token": "",
     "tg_proxy": "",   # 可选：http://127.0.0.1:7890 这类 HTTP 代理
     "tg_chat_id": "",
@@ -68,6 +88,16 @@ def load_config() -> dict:
         try:
             cfg.update(json.loads(CONFIG_FILE.read_text(encoding="utf-8")))
         except Exception:
+            pass
+    # Docker 部署时环境变量优先（方便 compose 里统一控制）
+    if os.getenv("YDP_MODE"):
+        cfg["mode"] = os.getenv("YDP_MODE")
+    if os.getenv("YDP_CDP_HOST"):
+        cfg["cdp_host"] = os.getenv("YDP_CDP_HOST")
+    if os.getenv("YDP_CDP_PORT"):
+        try:
+            cfg["cdp_port"] = int(os.getenv("YDP_CDP_PORT"))
+        except ValueError:
             pass
     return cfg
 
