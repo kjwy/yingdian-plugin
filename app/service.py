@@ -9,7 +9,7 @@ from typing import Any
 from . import library, notify, store
 from .config import load_config
 from .dian115 import get_client
-from .scoring import annotate_library, rank_shares
+from .scoring import annotate_library, format_episode_numbers, parse_episode_numbers, rank_shares
 
 
 def _match_filter(pattern: str, *texts: str) -> bool:
@@ -81,7 +81,9 @@ def _filter_candidates(
             if it.get("media_type") == "tv" and not it.get("episode_numbers"):
                 continue
         out.append(it)
-    if for_sub and cloud_type and cloud_type != "all":
+    if for_sub and cloud_type == "all":
+        return out
+    if for_sub and cloud_type:
         preferred = [it for it in out if (it.get("share_kind") or "115") == cloud_type]
         return preferred
     if for_sub and cfg.get("d115_enabled"):
@@ -91,7 +93,14 @@ def _filter_candidates(
     return out
 
 
-def search_shares(tmdb_id: str | int, media_type: str = "movie", season: int = 0, rank: bool = True) -> dict:
+def search_shares(
+    tmdb_id: str | int,
+    media_type: str = "movie",
+    season: int = 0,
+    rank: bool = True,
+    cloud_type: str = "",
+    for_subscription: bool = False,
+) -> dict:
     cfg = load_config()
     client, mode = get_client()
     payload: dict[str, Any] = {"tmdb_id": int(tmdb_id), "media_type": media_type}
@@ -104,14 +113,24 @@ def search_shares(tmdb_id: str | int, media_type: str = "movie", season: int = 0
     items = (res or {}).get("items") or []
     lib_status = library.status(tmdb_id, media_type, season)
     pending = store.recent_tv_pending(tmdb_id, int(cfg.get("pending_unlock_hours") or 24)) if media_type == "tv" else []
-    items = annotate_library(items, lib_status, requested_season=season, pending=pending)
+    items = annotate_library(
+        items,
+        lib_status,
+        requested_season=season,
+        pending=pending,
+        combine_pending=(cloud_type == "all"),
+        respect_pending=for_subscription,
+    )
     if rank:
         items = rank_shares(
             items,
             for_tv=(media_type == "tv"),
             skip_complete=bool(cfg.get("skip_in_library")),
         )
-    return {"ok": True, "mode": mode, "items": items, "library": lib_status}
+    return {
+        "ok": True, "mode": mode, "items": items, "library": lib_status,
+        "pending": pending,
+    }
 
 
 def unlock_share(
@@ -214,7 +233,13 @@ def run_subscription_search() -> dict:
             store.update_subscription_status(int(sub["id"]), "filtered", "未通过过滤词", completed=False)
             results.append({"title": title, "ok": False, "message": "未通过过滤词"})
             continue
-        data = search_shares(sub.get("tmdb_id"), media_type, int(sub.get("season") or 0))
+        data = search_shares(
+            sub.get("tmdb_id"),
+            media_type,
+            int(sub.get("season") or 0),
+            cloud_type=sub.get("cloud_type") or "115",
+            for_subscription=True,
+        )
         if not data.get("ok"):
             store.update_subscription_status(int(sub["id"]), "error", data.get("message") or "查询失败", completed=False)
             results.append({"title": title, "ok": False, "message": data.get("message")})
@@ -230,7 +255,18 @@ def run_subscription_search() -> dict:
             cloud_label = {"115": "115", "ed2k": "ED2K", "magnet": "磁力"}.get(
                 sub.get("cloud_type") or "115", "指定网盘"
             )
-            if lib.get("checked") and lib.get("exists"):
+            pending_numbers = set()
+            for row in data.get("pending") or []:
+                row_cloud = row.get("cloud_type") or "115"
+                if int(row.get("season") or 0) != int(sub.get("season") or 0):
+                    continue
+                if (sub.get("cloud_type") or "115") not in ("all", row_cloud):
+                    continue
+                pending_numbers.update(parse_episode_numbers(row.get("episode") or ""))
+            pending_text = format_episode_numbers(pending_numbers)
+            if pending_text:
+                message = f"第 {pending_text} 集链接已获取 · 等待 Emby 入库"
+            elif lib.get("checked") and lib.get("exists"):
                 if lib.get("complete"):
                     message = f"已完整入库 · {lib.get('available_text') or '无需补集'}"
                 elif lib.get("available_text"):

@@ -24,7 +24,9 @@
     const kindMap = { "115": "115", ed2k: "ED2K 离线", magnet: "磁力", offline: "115 离线" };
     const kindKey = (it.share_kind || "115").toLowerCase();
     const kindLabel = kindMap[kindKey] || kindKey.toUpperCase();
-    const actionText = kindKey === "115" ? "解锁并转存" : "解锁并获取链接";
+    const actionText = kindKey === "115"
+      ? "解锁并转存"
+      : (it.previously_obtained ? "再次获取链接" : "解锁并获取链接");
     const episode = it.episode || "";
     let libraryText = "";
     if (it.library_checked) {
@@ -54,6 +56,7 @@
           <span class="sr-size">💾 ${esc(size || "-")}</span>
           <span class="sr-cost ${isFree ? "free" : ""}">${isFree ? "免费" : "⭐ " + cost + " 积分"}</span>
           ${unlocked ? '<span class="sr-done">已解锁</span>' : ""}
+          ${it.previously_obtained ? '<span class="sr-pending">曾获取链接</span>' : ""}
           ${libraryText ? `<span class="sr-library ${disabled ? "done" : ""}">📚 ${esc(libraryText)}</span>` : ""}
         </div>
         <div class="sr-raw" title="${esc(raw)}">${esc(raw)}</div>
@@ -67,7 +70,9 @@
       btn.addEventListener("click", async () => {
         const rowEl = btn.closest(".share-row") || btn.parentNode;
         const it = JSON.parse(decodeURIComponent(rowEl.getAttribute("data-json")));
-        const actionText = (it.share_kind || "115") === "115" ? "解锁并转存" : "解锁并获取链接";
+        const actionText = (it.share_kind || "115") === "115"
+          ? "解锁并转存"
+          : (it.previously_obtained ? "再次获取链接" : "解锁并获取链接");
         btn.disabled = true;
         const t0 = Date.now();
         const box = rowEl.querySelector(".unlock-progress") || (() => {

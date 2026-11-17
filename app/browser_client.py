@@ -437,6 +437,16 @@ class BrowserClient:
             _lap("已进入分享详情页")
             time.sleep(1.2)
 
+            text_now = s.evaluate("document.body ? document.body.innerText : ''") or ""
+            existing_link = s.evaluate(
+                "(() => { const m = (document.body.innerText||'').match(" + repr(LINK_RE).replace("'", '"') + ");"
+                " return m ? m[0] : ''; })()"
+            )
+            if existing_link and re.search(r"已解锁|已获取|查看链接|分享链接", text_now):
+                _lap("资源已解锁，直接复用现有链接")
+                m = re.search(r"password=([A-Za-z0-9]+)", existing_link)
+                return {"code": "ok", "url_115": existing_link, "receive_code": m.group(1) if m else ""}
+
             # 2) 详情页点「解锁并查看 · N 积分」
             btn_info = s.evaluate(
                 "(() => { const b = Array.from(document.querySelectorAll('button'))"
@@ -444,10 +454,11 @@ class BrowserClient:
                 " return b ? {text:(b.innerText||'').trim(), disabled: !!b.disabled} : null; })()"
             )
             if not btn_info:
-                return {"code": "no_button", "msg": "没找到解锁按钮 · 可能已解锁或需人工处理"}
+                if re.search(r"已解锁|已获取", text_now):
+                    return {"code": "already_unlocked", "msg": "资源已解锁，但页面未显示可用链接"}
+                return {"code": "no_button", "msg": "没找到解锁按钮 · 可能需要人工处理"}
 
             # 已有「查看」说明已解锁过：直接读链接
-            text_now = s.evaluate("document.body ? document.body.innerText : ''") or ""
             if "已解锁" in text_now and "解锁并查看" not in (btn_info.get("text") or ""):
                 link = s.evaluate(
                     "(() => { const m = (document.body.innerText||'').match(" + repr(LINK_RE).replace("'", '"') + ");"

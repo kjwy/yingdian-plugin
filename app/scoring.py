@@ -118,6 +118,8 @@ def annotate_library(
     status: dict | None,
     requested_season: int = 0,
     pending: list[dict] | None = None,
+    combine_pending: bool = False,
+    respect_pending: bool = False,
 ) -> list[dict]:
     """给候选资源标注已入库集数、可补齐集数和是否值得解锁。"""
     seasons = (status or {}).get("seasons") or {}
@@ -148,6 +150,7 @@ def annotate_library(
         item["new_episode_count"] = 0
         item["new_episodes"] = []
         item["new_episodes_text"] = ""
+        item["previously_obtained"] = False
 
         if not status or not status.get("checked") or not status.get("exists"):
             continue
@@ -168,18 +171,26 @@ def annotate_library(
             available = set(status.get("available") or [])
 
         cloud_type = str(item.get("share_kind") or "115").lower()
-        pending_eps = pending_by_season_cloud.get((int(season_no or 0), cloud_type), set())
+        if combine_pending:
+            pending_eps = set()
+            for (pending_season, _pending_cloud), values in pending_by_season_cloud.items():
+                if pending_season == int(season_no or 0):
+                    pending_eps.update(values)
+        else:
+            pending_eps = pending_by_season_cloud.get((int(season_no or 0), cloud_type), set())
         item["library_available"] = sorted(available)
         item["library_available_text"] = format_episode_numbers(available)
         item["pending_episode_numbers"] = sorted(pending_eps)
         item["pending_episodes_text"] = format_episode_numbers(pending_eps)
-        item["pending_overlap_count"] = len(episodes & pending_eps)
+        effective_pending = pending_eps if (respect_pending or cloud_type == "115") else set()
+        item["pending_overlap_count"] = len(episodes & effective_pending)
+        item["previously_obtained"] = bool(episodes & pending_eps)
         item["in_library"] = bool(episodes and episodes.issubset(available))
 
         if not episodes:
             continue
 
-        new_episodes = episodes - available - pending_eps
+        new_episodes = episodes - available - effective_pending
         item["new_episodes"] = sorted(new_episodes)
         item["new_episode_count"] = len(new_episodes)
         item["new_episodes_text"] = format_episode_numbers(new_episodes)

@@ -69,7 +69,7 @@
       <div class="sub-main">
         <div class="sub-title">
           <strong>{{ s.title }}</strong>
-          <span class="cloud-tag cloud-{{ s.cloud_type or '115' }}">{{ "115网盘" if (s.cloud_type or "115") == "115" else ("ED2K" if s.cloud_type == "ed2k" else "磁力") }}</span>
+          <span class="cloud-tag cloud-{{ s.cloud_type or '115' }}">{{ "全部网盘" if s.cloud_type == "all" else ("115网盘" if (s.cloud_type or "115") == "115" else ("ED2K" if s.cloud_type == "ed2k" else "磁力")) }}</span>
           {% if s.completed %}<span class="status-tag done">已完成</span>
           {% elif s.last_status == "success" %}<span class="status-tag ok">已转存</span>
           {% elif s.last_status == "error" %}<span class="status-tag bad">失败</span>
@@ -142,6 +142,7 @@
         </label>
         <label>频道类型
           <select class="inp" name="cloud_type">
+            <option value="all">全部网盘，优先补全集数</option>
             <option value="115">115网盘</option>
             <option value="ed2k">ED2K 离线</option>
             <option value="magnet">磁力</option>
