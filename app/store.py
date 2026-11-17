@@ -230,6 +230,12 @@ def toggle_subscription(sid: int, enabled: bool) -> None:
         conn.execute("UPDATE subscriptions SET enabled = ? WHERE id = ?", (1 if enabled else 0, sid))
 
 
+def set_subscription_cloud(sid: int, cloud_type: str) -> None:
+    cloud_type = cloud_type if cloud_type in ("all", "115", "ed2k", "magnet") else "115"
+    with _conn() as conn:
+        conn.execute("UPDATE subscriptions SET cloud_type = ? WHERE id = ?", (cloud_type, sid))
+
+
 def set_last_share(sid: int, share_id: str) -> None:
     with _conn() as conn:
         conn.execute("UPDATE subscriptions SET last_share_id = ? WHERE id = ?", (str(share_id), sid))

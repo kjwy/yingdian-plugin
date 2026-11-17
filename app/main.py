@@ -462,6 +462,12 @@ def subs_toggle(sid: int, enabled: str = Form("0")):
     return RedirectResponse("/subs", status_code=303)
 
 
+@app.post("/subs/{sid}/cloud")
+def subs_cloud(sid: int, cloud_type: str = Form("115")):
+    store.set_subscription_cloud(sid, cloud_type)
+    return RedirectResponse("/subs", status_code=303)
+
+
 @app.post("/subs/rules")
 async def subs_rules(request: Request):
     cfg = load_config()

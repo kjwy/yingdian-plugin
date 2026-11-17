@@ -89,6 +89,14 @@
         <div class="sub-time">上次检查：{{ s.last_checked_at or "尚未执行" }}</div>
       </div>
       <div class="sub-actions">
+        <form method="post" action="/subs/{{ s.id }}/cloud" class="cloud-switch">
+          <select name="cloud_type" onchange="this.form.submit()">
+            <option value="all" {{ "selected" if s.cloud_type == "all" }}>全部网盘</option>
+            <option value="115" {{ "selected" if (s.cloud_type or "115") == "115" }}>115网盘</option>
+            <option value="ed2k" {{ "selected" if s.cloud_type == "ed2k" }}>ED2K</option>
+            <option value="magnet" {{ "selected" if s.cloud_type == "magnet" }}>磁力</option>
+          </select>
+        </form>
         <form method="post" action="/subs/{{ s.id }}/toggle">
           <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
           <button class="btn sm">{{ "暂停" if s.enabled else "启用" }}</button>
