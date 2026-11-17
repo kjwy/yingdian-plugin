@@ -182,6 +182,15 @@
       {% endfor %}
     {% endfor %}
   </div>
+  <div class="calendar-agenda">
+    {% for e in calendar.events %}
+    <div class="agenda-item">
+      <span>{{ e.date[5:] }}</span>
+      <b>{{ e.title }}</b>
+      <em>第{{ e.episode }}集{% if e.name %} · {{ e.name }}{% endif %}</em>
+    </div>
+    {% endfor %}
+  </div>
   {% if not calendar.events %}<div class="empty">本月暂无订阅更新时间</div>{% endif %}
 </div>
 
