@@ -21,6 +21,8 @@ UA = (
 )
 API_RECEIVE = "https://webapi.115.com/share/receive"
 API_USERINFO = "https://webapi.115.com/user/info"
+API_SHARE_SNAP = "https://webapi.115.com/share/snap"
+SHARE_URL_RE = re.compile(r"https?://(?:115cdn\.com|115\.com|anxia\.com)/s/[A-Za-z0-9]+(?:\?[^\"'\s<]+)?", re.I)
 
 
 def parse_115_link(url: str) -> tuple[str, str]:
@@ -36,6 +38,97 @@ def parse_115_link(url: str) -> tuple[str, str]:
     if m2:
         pwd = m2.group(1)
     return code, pwd
+
+
+def resolve_share_link(url: str, cookie: str | None = None) -> str:
+    """解析 re0.me 等中转链接，返回最终 115 分享链接。"""
+    current = (url or "").strip()
+    if not current:
+        return ""
+    cfg = load_config()
+    cookie = (cookie if cookie is not None else cfg.get("d115_cookie", "")).strip()
+    if parse_115_link(current)[0]:
+        return current
+    try:
+        with httpx.Client(
+            timeout=25,
+            headers=_headers(cookie) if cookie else {"User-Agent": UA},
+            follow_redirects=True,
+        ) as client:
+            response = client.get(current)
+            final_url = str(response.url)
+            if parse_115_link(final_url)[0]:
+                return final_url
+            match = SHARE_URL_RE.search(response.text or "")
+            if match:
+                return match.group(0)
+    except Exception:
+        pass
+    return current
+
+
+def inspect_share(link: str, cookie: str | None = None) -> dict:
+    """读取 115 分享内的文件名和集数。"""
+    cfg = load_config()
+    cookie = (cookie if cookie is not None else cfg.get("d115_cookie", "")).strip()
+    resolved = resolve_share_link(link, cookie)
+    share_code, pwd = parse_115_link(resolved)
+    if not share_code:
+        return {"ok": False, "message": "无法解析 115 分享链接", "episodes": [], "files": []}
+    filenames: list[str] = []
+    title = ""
+    queue = ["0"]
+    seen = set()
+    try:
+        with httpx.Client(timeout=30, headers=_headers(cookie), follow_redirects=True) as client:
+            while queue and len(seen) < 80:
+                cid = str(queue.pop(0))
+                if cid in seen:
+                    continue
+                seen.add(cid)
+                response = client.get(API_SHARE_SNAP, params={
+                    "share_code": share_code,
+                    "receive_code": pwd,
+                    "offset": 0,
+                    "limit": 200,
+                    "cid": cid,
+                })
+                data = response.json()
+                if not data.get("state"):
+                    return {
+                        "ok": False,
+                        "message": data.get("error") or "115 分享读取失败",
+                        "episodes": [], "files": [],
+                    }
+                payload = data.get("data") or {}
+                title = title or (payload.get("shareinfo") or {}).get("share_title") or ""
+                for item in payload.get("list") or []:
+                    name = str(item.get("n") or "")
+                    is_folder = int(item.get("fc") or 0) == 0 and item.get("cid")
+                    if is_folder:
+                        queue.append(str(item["cid"]))
+                    elif name:
+                        filenames.append(name)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "message": f"读取 115 分享失败：{exc}", "episodes": [], "files": []}
+
+    episodes: set[int] = set()
+    for name in filenames:
+        for episode in re.findall(r"(?i)S\d{1,3}E(\d{1,4})", name):
+            episodes.add(int(episode))
+        if not re.search(r"(?i)S\d{1,3}E\d{1,4}", name):
+            for episode in re.findall(r"(?i)(?:^|[.\s_-])E(\d{1,4})(?:[.\s_-]|$)", name):
+                episodes.add(int(episode))
+            for episode in re.findall(r"第\s*(\d{1,4})\s*集", name):
+                episodes.add(int(episode))
+    return {
+        "ok": True,
+        "resolved_url": resolved,
+        "title": title,
+        "episodes": sorted(episodes),
+        "files": filenames,
+        "message": f"读取到 {len(filenames)} 个文件、{len(episodes)} 集",
+    }
 
 
 def _headers(cookie: str) -> dict:
@@ -75,6 +168,7 @@ def receive(link: str, cookie: str | None = None, cid: str | None = None) -> tup
     if not cookie:
         return False, "未配置 115 Cookie"
 
+    link = resolve_share_link(link, cookie)
     share_code, pwd = parse_115_link(link)
     if not share_code:
         return False, f"无法从链接解析出 115 分享码：{link[:60]}"

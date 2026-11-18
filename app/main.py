@@ -450,6 +450,32 @@ def subs_add(
     return RedirectResponse(f"/subs?tab={media_type}", status_code=303)
 
 
+@app.post("/subs/{sid}/edit")
+def subs_edit(
+    sid: int,
+    title: str = Form(""),
+    tmdb_id: str = Form(...),
+    media_type: str = Form("movie"),
+    season: int = Form(0),
+    start_episode: int = Form(1),
+    total_episodes: int = Form(0),
+    cloud_type: str = Form("115"),
+    subscription_url: str = Form(""),
+):
+    store.update_subscription(
+        sid,
+        title.strip() or f"TMDB {tmdb_id}",
+        tmdb_id.strip(),
+        media_type,
+        int(season or 0),
+        int(start_episode or 1),
+        int(total_episodes or 0),
+        cloud_type,
+        subscription_url.strip(),
+    )
+    return RedirectResponse(f"/subs?tab={media_type}", status_code=303)
+
+
 @app.post("/subs/{sid}/delete")
 def subs_delete(sid: int):
     store.delete_subscription(sid)

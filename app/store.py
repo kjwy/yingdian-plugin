@@ -236,6 +236,30 @@ def set_subscription_cloud(sid: int, cloud_type: str) -> None:
         conn.execute("UPDATE subscriptions SET cloud_type = ? WHERE id = ?", (cloud_type, sid))
 
 
+def update_subscription(
+    sid: int,
+    title: str,
+    tmdb_id: str,
+    media_type: str,
+    season: int,
+    start_episode: int,
+    total_episodes: int,
+    cloud_type: str,
+    subscription_url: str,
+) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE subscriptions SET title = ?, tmdb_id = ?, media_type = ?, season = ?, "
+            "start_episode = ?, total_episodes = ?, cloud_type = ?, subscription_url = ? "
+            "WHERE id = ?",
+            (
+                title, str(tmdb_id), media_type, int(season or 0),
+                max(1, int(start_episode or 1)), max(0, int(total_episodes or 0)),
+                cloud_type, subscription_url, sid,
+            ),
+        )
+
+
 def set_last_share(sid: int, share_id: str) -> None:
     with _conn() as conn:
         conn.execute("UPDATE subscriptions SET last_share_id = ? WHERE id = ?", (str(share_id), sid))

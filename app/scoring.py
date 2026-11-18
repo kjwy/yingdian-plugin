@@ -178,6 +178,7 @@ def annotate_library(
                     pending_eps.update(values)
         else:
             pending_eps = pending_by_season_cloud.get((int(season_no or 0), cloud_type), set())
+        pending_eps = pending_eps - available
         item["library_available"] = sorted(available)
         item["library_available_text"] = format_episode_numbers(available)
         item["pending_episode_numbers"] = sorted(pending_eps)

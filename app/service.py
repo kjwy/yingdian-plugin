@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from datetime import date, datetime
 from typing import Any
@@ -220,6 +221,97 @@ def unlock_share(
     return {"ok": ok, "link": link, "password": pwd, "raw": res, "mode": mode, "message": (("已解锁" + extra) if ok else "")}
 
 
+def _run_manual_subscription(sub: dict, cfg: dict) -> dict | None:
+    """检查订阅中手动填写的 115 分享链接，只转存新增集数。"""
+    url = str(sub.get("subscription_url") or "").strip()
+    if not url:
+        return None
+    from .transfer115 import inspect_share, receive
+
+    cookie = str(cfg.get("d115_cookie") or "").strip()
+    inspected = inspect_share(url, cookie)
+    if not inspected.get("ok"):
+        message = inspected.get("message") or "手动链接读取失败"
+        store.update_subscription_status(int(sub["id"]), "error", message, completed=False)
+        return {"title": sub.get("title") or "", "ok": False, "message": message}
+
+    source_episodes = set(int(x) for x in inspected.get("episodes") or [])
+    season = int(sub.get("season") or 0)
+    lib = library.status(sub.get("tmdb_id"), sub.get("media_type") or "movie", season)
+    available = set()
+    if lib.get("checked") and lib.get("exists") and sub.get("media_type") == "tv":
+        season_data = (lib.get("seasons") or {}).get(str(season)) or {}
+        available = set(season_data.get("available") or [])
+
+    pending = set()
+    for row in store.recent_tv_pending(
+        sub.get("tmdb_id"), int(cfg.get("pending_unlock_hours") or 24)
+    ):
+        if int(row.get("season") or 0) == season and (row.get("cloud_type") or "115") == "115":
+            pending.update(parse_episode_numbers(row.get("episode") or ""))
+
+    if sub.get("media_type") == "movie":
+        if lib.get("exists"):
+            store.update_subscription_status(int(sub["id"]), "completed", "电影已入库", completed=True)
+            return {"title": sub.get("title") or "", "ok": False, "message": "电影已入库"}
+        new_episodes = set()
+    else:
+        if not source_episodes:
+            message = "手动链接中未识别到剧集集数"
+            store.update_subscription_status(int(sub["id"]), "error", message, completed=False)
+            return {"title": sub.get("title") or "", "ok": False, "message": message}
+        new_episodes = source_episodes - available - pending
+
+    if not new_episodes and sub.get("media_type") == "tv":
+        missing_pending = source_episodes - available
+        if missing_pending:
+            message = f"链接中的第 {format_episode_numbers(missing_pending)} 集已转存，等待 Emby 入库"
+        else:
+            message = f"链接中的第 {format_episode_numbers(source_episodes)} 集均已入库"
+        completed = bool(lib.get("complete") and not missing_pending)
+        store.update_subscription_status(
+            int(sub["id"]), "completed" if completed else "waiting", message, completed=completed
+        )
+        return {"title": sub.get("title") or "", "ok": False, "message": message}
+
+    ok, transfer_message = receive(
+        inspected.get("resolved_url") or url,
+        cookie,
+        cfg.get("d115_cid"),
+    )
+    if not ok:
+        store.update_subscription_status(int(sub["id"]), "error", transfer_message, completed=False)
+        return {"title": sub.get("title") or "", "ok": False, "message": transfer_message}
+
+    episode_text = (
+        f"第{season or 1}季 · 第 {format_episode_numbers(new_episodes)} 集"
+        if new_episodes else ""
+    )
+    share_sig = hashlib.sha1(
+        f"{inspected.get('resolved_url') or url}|{','.join(map(str, sorted(new_episodes)))}".encode()
+    ).hexdigest()[:16]
+    store.add_unlock(
+        share_id=f"manual:{share_sig}",
+        tmdb_id=sub.get("tmdb_id"),
+        media_type=sub.get("media_type"),
+        season=season,
+        title=sub.get("title"),
+        episode=episode_text,
+        cloud_type="115",
+        tag="手动115订阅链接",
+        cost=0,
+        link=inspected.get("resolved_url") or url,
+        ok=True,
+        message=transfer_message,
+    )
+    message = (
+        f"发现新集 {format_episode_numbers(new_episodes)}，已提交 115 转存"
+        if new_episodes else "已提交 115 转存"
+    )
+    store.update_subscription_status(int(sub["id"]), "success", message, completed=False)
+    return {"title": sub.get("title") or "", "ok": True, "message": message}
+
+
 def run_subscription_search() -> dict:
     """遍历订阅，搜索并解锁最优资源"""
     cfg = load_config()
@@ -232,6 +324,10 @@ def run_subscription_search() -> dict:
         if not _match_filter(pattern or "", title):
             store.update_subscription_status(int(sub["id"]), "filtered", "未通过过滤词", completed=False)
             results.append({"title": title, "ok": False, "message": "未通过过滤词"})
+            continue
+        manual_result = _run_manual_subscription(sub, cfg)
+        if manual_result is not None:
+            results.append(manual_result)
             continue
         data = search_shares(
             sub.get("tmdb_id"),
@@ -263,6 +359,11 @@ def run_subscription_search() -> dict:
                 if (sub.get("cloud_type") or "115") not in ("all", row_cloud):
                     continue
                 pending_numbers.update(parse_episode_numbers(row.get("episode") or ""))
+            available_for_season = set()
+            if lib.get("media_type") == "tv":
+                season_data = (lib.get("seasons") or {}).get(str(int(sub.get("season") or 0))) or {}
+                available_for_season = set(season_data.get("available") or [])
+            pending_numbers -= available_for_season
             pending_text = format_episode_numbers(pending_numbers)
             if pending_text:
                 message = f"第 {pending_text} 集链接已获取 · 等待 Emby 入库"

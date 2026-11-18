@@ -200,29 +200,15 @@
     b.disabled = false;
   });
 
-  // ===== 搜索结果缓存恢复（切到设置页再回来还在）=====
-  (function restoreSearchCache() {
-    if (!document.getElementById("search-result")) return;   // 只在仪表盘
-    try {
-      const raw = localStorage.getItem("yd_search_cache");
-      if (!raw) return;
-      const c = JSON.parse(raw);
-      if (!c || !c.items || !c.items.length) return;
-      const qEl = $("#q-tmdb");
-      const tEl = $("#q-type");
-      const sEl = $("#q-season");
-      if (qEl) qEl.value = c.tmdb_id || "";
-      if (tEl) tEl.value = c.media_type || "";
-      if (sEl) sEl.value = c.season || "";
-      const box = $("#search-result");
-      const ago = Math.max(1, Math.round((Date.now() - (c.ts || Date.now())) / 60000));
-      box.innerHTML = `<div class="item"><span class="m">📌 上次结果 · ${ago} 分钟前 · ${c.items.length} 条 · 点“查询资源”刷新</span></div>`
-        + mediaSummary(c.media)
-        + librarySummary(c.library)
-        + (c.resolved_title ? `<div class="item"><span class="m">已匹配：${esc(c.resolved_title)} · TMDB ${esc(c.tmdb_id_resolved)}</span></div>` : "")
-        + c.items.map((it) => itemHtml(it, true)).join("");
-      bindUnlock(box, c.resolved_title || ("TMDB " + (c.tmdb_id_resolved || "")));
-    } catch (e) {}
+  // 搜索页每次进入都保持空白，不恢复上一次搜索结果
+  (function resetSearchPage() {
+    if (!document.getElementById("search-result")) return;
+    localStorage.removeItem("yd_search_cache");
+    if ($("#q-tmdb")) $("#q-tmdb").value = "";
+    if ($("#q-season")) $("#q-season").value = "";
+    if ($("#q-type")) $("#q-type").value = "";
+    const box = $("#search-result");
+    if (box) box.innerHTML = "";
   })();
 
   // 滚动位置记忆
@@ -387,15 +373,6 @@
     }
     if (!r.ok) { box.innerHTML = `<div class="item"><span class="m" style="color:#f87171">❌ ${esc(r.message)}</span></div>`; return; }
     if (!r.items.length) { box.innerHTML = '<div class="item"><span class="m">影癫上没有可解锁资源</span></div>'; return; }
-    // 缓存本次搜索结果（切页面回来还在）
-    try {
-      localStorage.setItem("yd_search_cache", JSON.stringify({
-        tmdb_id, media_type, season, items: r.items,
-        resolved_title: r.resolved_title || "", tmdb_id_resolved: r.tmdb_id,
-        media: r.media || null, library: r.library || null, ts: Date.now(),
-      }));
-    } catch (e) {}
-
     box.innerHTML = mediaSummary(r.media) + librarySummary(r.library) + (r.resolved_title
       ? `<div class="item"><span class="m">已匹配：${esc(r.resolved_title)} · TMDB ${esc(r.tmdb_id)}</span></div>`
       : "") + r.items.map((it) => itemHtml(it, true)).join("");
@@ -524,8 +501,30 @@
     const titleEl = $("#sub-title");
     const tmdbEl = $("#sub-tmdb");
     const resultEl = $("#sub-tmdb-results");
-    const open = (type) => {
+    const form = $("#sub-add-form");
+    const modalTitle = $("#sub-modal-title");
+    const modalDesc = $("#sub-modal-desc");
+    const submitBtn = $("#sub-modal-submit");
+    const open = (type, sub = null) => {
+      form.reset();
+      form.action = sub ? `/subs/${sub.id}/edit` : "/subs/add";
+      modalTitle.textContent = sub ? "编辑订阅任务" : "添加订阅任务";
+      modalDesc.textContent = sub ? "修改手动的 115 链接、集数或频道类型" : "选择 TMDB 条目后自动匹配影癫资源";
+      submitBtn.textContent = sub ? "保存修改" : "添加订阅";
       if (typeEl && ["movie", "tv"].includes(type)) typeEl.value = type;
+      if (sub) {
+        titleEl.value = sub.title || "";
+        tmdbEl.value = sub.tmdb_id || "";
+        typeEl.value = sub.media_type || type || "movie";
+        form.querySelector('[name="season"]').value = sub.season || 0;
+        form.querySelector('[name="start_episode"]').value = sub.start_episode || 1;
+        form.querySelector('[name="total_episodes"]').value = sub.total_episodes || 0;
+        form.querySelector('[name="cloud_type"]').value = sub.cloud_type || "115";
+        form.querySelector('[name="subscription_url"]').value = sub.subscription_url || "";
+      } else {
+        form.querySelector('[name="season"]').value = type === "tv" ? 1 : 0;
+      }
+      resultEl.innerHTML = "";
       modal.classList.add("show");
       modal.setAttribute("aria-hidden", "false");
       document.body.classList.add("modal-open");
@@ -541,6 +540,22 @@
     $("#cancel-sub-modal")?.addEventListener("click", close);
     modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    document.querySelectorAll(".sub-editable").forEach((card) => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button, form, select, input, a")) return;
+        try {
+          open(null, JSON.parse(card.dataset.sub));
+        } catch (err) {}
+      });
+    });
+    document.querySelectorAll(".edit-sub").forEach((button) => {
+      button.addEventListener("click", () => {
+        const card = button.closest(".sub-editable");
+        try {
+          open(null, JSON.parse(card.dataset.sub));
+        } catch (err) {}
+      });
+    });
 
     async function selectTmdb(item) {
       titleEl.value = item.title || "";

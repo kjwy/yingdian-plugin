@@ -65,7 +65,7 @@
   {% if subs %}
   <div class="sub-list">
     {% for s in subs %}
-    <div class="sub-card">
+    <div class="sub-card sub-editable" data-sub='{{ s|tojson }}' title="点击编辑订阅">
       <div class="sub-main">
         <div class="sub-title">
           <strong>{{ s.title }}</strong>
@@ -101,6 +101,7 @@
           <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
           <button class="btn sm">{{ "暂停" if s.enabled else "启用" }}</button>
         </form>
+        <button type="button" class="btn sm edit-sub">编辑</button>
         <form method="post" action="/subs/{{ s.id }}/delete">
           <button class="btn sm danger">删除</button>
         </form>
@@ -117,8 +118,8 @@
   <div class="modal-card">
     <div class="modal-head">
       <div>
-        <h3>添加订阅任务</h3>
-        <p>选择 TMDB 条目后自动匹配影癫资源</p>
+        <h3 id="sub-modal-title">添加订阅任务</h3>
+        <p id="sub-modal-desc">选择 TMDB 条目后自动匹配影癫资源</p>
       </div>
       <button class="icon-btn" id="close-sub-modal">×</button>
     </div>
@@ -163,7 +164,7 @@
       <div id="sub-tmdb-results" class="results"></div>
       <div class="modal-actions">
         <button type="button" class="btn" id="cancel-sub-modal">取消</button>
-        <button class="btn primary">添加订阅</button>
+        <button class="btn primary" id="sub-modal-submit">添加订阅</button>
       </div>
     </form>
   </div>
