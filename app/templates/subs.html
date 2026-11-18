@@ -177,31 +177,63 @@
     <h3>{{ calendar.title }}</h3>
     <a class="btn sm" href="/subs?tab=calendar&month={{ calendar.next }}">下个月 ›</a>
   </div>
+  <div class="calendar-day-strip">
+    {% for d in calendar.day_strip %}
+    <a class="calendar-day-chip status-{{ d.status }} {{ 'selected' if d.selected }} {{ 'today' if d.is_today }}"
+       href="/subs?tab=calendar&month={{ calendar.month }}&day={{ d.key }}">
+      <span>周{{ d.weekday }}</span>
+      <b>{{ d.day }}</b>
+      <em>{{ d.count if d.count else "—" }}</em>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="calendar-selected">
+    <div class="calendar-selected-head">
+      <h3>{{ calendar.selected_label }}</h3>
+      <span>{{ calendar.selected_events|length }} 项订阅更新</span>
+    </div>
+    {% if calendar.selected_events %}
+    <div class="calendar-event-list">
+      {% for e in calendar.selected_events %}
+      <div class="calendar-event-card status-{{ e.status }}">
+        {% if e.poster %}<img src="{{ e.poster }}" alt="{{ e.title }}">{% endif %}
+        <div>
+          <strong>{{ e.title }}</strong>
+          <span>{{ e.episode_label }}{% if e.episode_name %} · {{ e.episode_name }}{% endif %}</span>
+          <small>第 {{ e.season }} 季 · {{ e.status_label }}{% if not e.enabled %} · 订阅已暂停{% endif %}</small>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">当天没有订阅更新</div>
+    {% endif %}
+  </div>
   <div class="calendar-grid">
     {% for name in ['一', '二', '三', '四', '五', '六', '日'] %}<div class="calendar-weekday">周{{ name }}</div>{% endfor %}
     {% for week in calendar.weeks %}
       {% for day in week %}
-      <div class="calendar-day {{ 'muted' if not day.in_month }} {{ 'today' if day.today }}">
+      <a class="calendar-day status-{{ day.status }} {{ 'muted' if not day.in_month }} {{ 'today' if day.today }}"
+         href="/subs?tab=calendar&month={{ calendar.month }}&day={{ day.date }}">
         <div class="day-number">{{ day.day }}</div>
         {% for e in day.events %}
-        <div class="calendar-event" title="{{ e.title }} 第{{ e.episode }}集">
-          <b>{{ e.title }}</b><span>第{{ e.episode }}集</span>
+        <div class="calendar-event status-{{ e.status }}" title="{{ e.title }} 第{{ e.episode }}集">
+          <b>{{ e.title }}</b><span>第{{ e.episode }}集 · {{ e.status_label }}</span>
         </div>
         {% endfor %}
-      </div>
+      </a>
       {% endfor %}
     {% endfor %}
   </div>
   <div class="calendar-agenda">
-    {% for e in calendar.events %}
+    {% for e in calendar.selected_events %}
     <div class="agenda-item">
-      <span>{{ e.date[5:] }}</span>
+      <span>{{ e.status_label }}</span>
       <b>{{ e.title }}</b>
-      <em>第{{ e.episode }}集{% if e.name %} · {{ e.name }}{% endif %}</em>
+      <em>{{ e.episode_label }}{% if e.episode_name %} · {{ e.episode_name }}{% endif %}</em>
     </div>
     {% endfor %}
   </div>
-  {% if not calendar.events %}<div class="empty">本月暂无订阅更新时间</div>{% endif %}
 </div>
 
 {% elif tab == 'rules' %}

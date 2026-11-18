@@ -200,15 +200,32 @@
     b.disabled = false;
   });
 
-  // 搜索页每次进入都保持空白，不恢复上一次搜索结果
-  (function resetSearchPage() {
+  // 搜索结果在切页后保留 60 秒，超时自动失效
+  const SEARCH_CACHE_TTL = 60 * 1000;
+  (function restoreSearchCache() {
     if (!document.getElementById("search-result")) return;
-    localStorage.removeItem("yd_search_cache");
-    if ($("#q-tmdb")) $("#q-tmdb").value = "";
-    if ($("#q-season")) $("#q-season").value = "";
-    if ($("#q-type")) $("#q-type").value = "";
+    const params = new URLSearchParams(location.search);
     const box = $("#search-result");
-    if (box) box.innerHTML = "";
+    if (params.get("q") || params.get("tmdb_id")) return;
+    try {
+      const raw = localStorage.getItem("yd_search_cache");
+      if (!raw) return;
+      const cache = JSON.parse(raw);
+      if (!cache?.items?.length || Date.now() - Number(cache.ts || 0) > SEARCH_CACHE_TTL) {
+        localStorage.removeItem("yd_search_cache");
+        return;
+      }
+      if ($("#q-tmdb")) $("#q-tmdb").value = cache.tmdb_id || "";
+      if ($("#q-type")) $("#q-type").value = cache.media_type || "";
+      if ($("#q-season")) $("#q-season").value = cache.season || "";
+      box.innerHTML = mediaSummary(cache.media)
+        + librarySummary(cache.library)
+        + (cache.resolved_title ? `<div class="item"><span class="m">已匹配：${esc(cache.resolved_title)} · TMDB ${esc(cache.tmdb_id_resolved)}</span></div>` : "")
+        + cache.items.map((it) => itemHtml(it, true)).join("");
+      bindUnlock(box, cache.resolved_title || ("TMDB " + (cache.tmdb_id_resolved || "")));
+    } catch (e) {
+      localStorage.removeItem("yd_search_cache");
+    }
   })();
 
   // 滚动位置记忆
@@ -373,11 +390,35 @@
     }
     if (!r.ok) { box.innerHTML = `<div class="item"><span class="m" style="color:#f87171">❌ ${esc(r.message)}</span></div>`; return; }
     if (!r.items.length) { box.innerHTML = '<div class="item"><span class="m">影癫上没有可解锁资源</span></div>'; return; }
+    const cacheTs = Date.now();
+    try {
+      localStorage.setItem("yd_search_cache", JSON.stringify({
+        tmdb_id, media_type, season, items: r.items,
+        resolved_title: r.resolved_title || "", tmdb_id_resolved: r.tmdb_id,
+        media: r.media || null, library: r.library || null, ts: cacheTs,
+      }));
+      setTimeout(() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem("yd_search_cache") || "{}");
+          if (Number(saved.ts || 0) === cacheTs) localStorage.removeItem("yd_search_cache");
+        } catch (e) {}
+      }, SEARCH_CACHE_TTL);
+    } catch (e) {}
     box.innerHTML = mediaSummary(r.media) + librarySummary(r.library) + (r.resolved_title
       ? `<div class="item"><span class="m">已匹配：${esc(r.resolved_title)} · TMDB ${esc(r.tmdb_id)}</span></div>`
       : "") + r.items.map((it) => itemHtml(it, true)).join("");
     bindUnlock(box, r.resolved_title || ("TMDB " + r.tmdb_id));
     return;
+  });
+
+  // 搜索框回车确认
+  ["#q-tmdb", "#q-season"].forEach((selector) => {
+    $(selector)?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        $("#btn-search")?.click();
+      }
+    });
   });
 
   // 执行订阅搜索

@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from . import __version__, library, scheduler, service, store, tmdb
 from .config import load_config, mask_secret, save_config
 from .dian115 import client_status
+from .scoring import format_episode_numbers
 
 BASE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
@@ -316,31 +317,61 @@ async def settings_save(request: Request):
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
-def _subscription_calendar(month: str) -> tuple[dict, str, str]:
+def _subscription_calendar(month: str, selected_day: str = "") -> tuple[dict, str, str]:
     today = date.today()
     try:
         year, month_no = (int(x) for x in month.split("-", 1))
         current = date(year, month_no, 1)
     except Exception:
         current = today.replace(day=1)
+    try:
+        selected = datetime.strptime(selected_day, "%Y-%m-%d").date()
+        if selected.month != current.month or selected.year != current.year:
+            raise ValueError
+    except Exception:
+        selected = today if (today.year, today.month) == (current.year, current.month) else current
     prev_month = (current.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     next_month = (current.replace(day=28) + timedelta(days=4)).replace(day=1).strftime("%Y-%m")
     events = []
     for sub in store.list_subscriptions():
         if sub.get("media_type") != "tv" or not sub.get("tmdb_id"):
             continue
+        season = int(sub.get("season") or 0)
+        lib_status = library.status(sub["tmdb_id"], "tv", season)
+        season_data = (lib_status.get("seasons") or {}).get(str(season)) or {}
+        available = set(season_data.get("available") or [])
+        detail = tmdb.details(sub["tmdb_id"], "tv")
         for episode in tmdb.season_episodes(sub["tmdb_id"], int(sub.get("season") or 0)):
             air_date = episode.get("air_date") or ""
             if not air_date.startswith(current.strftime("%Y-%m")):
                 continue
+            episode_no = int(episode.get("episode") or 0)
+            if episode_no in available:
+                status = "completed"
+            elif air_date < today.isoformat():
+                status = "overdue"
+            elif air_date == today.isoformat():
+                status = "today"
+            else:
+                status = "upcoming"
             events.append({
                 "date": air_date,
                 "title": sub.get("title") or "",
-                "episode": episode.get("episode") or 0,
+                "poster": detail.get("poster") or "",
+                "tmdb_id": sub.get("tmdb_id"),
+                "episode": episode_no,
+                "episode_name": episode.get("name") or "",
                 "name": episode.get("name") or "",
+                "season": season,
+                "status": status,
+                "status_label": {
+                    "completed": "已入库", "overdue": "待补",
+                    "today": "今天", "upcoming": "将更",
+                }[status],
+                "enabled": bool(sub.get("enabled")),
                 "subscription_id": sub.get("id"),
             })
-    events.sort(key=lambda x: (x["date"], x["title"], x["episode"]))
+    events.sort(key=lambda x: (x["date"], x["title"], x["season"], x["episode"]))
     by_day = {}
     for event in events:
         try:
@@ -348,14 +379,54 @@ def _subscription_calendar(month: str) -> tuple[dict, str, str]:
         except Exception:
             continue
         by_day.setdefault(day, []).append(event)
+
+    def worst_status(items: list[dict]) -> str:
+        order = {"upcoming": 1, "today": 2, "overdue": 3, "completed": 0}
+        return max(items, key=lambda x: order.get(x["status"], 0))["status"] if items else "empty"
+
+    grouped = []
+    group_map = {}
+    for event in by_day.get(selected.day, []):
+        key = (event["subscription_id"], event["season"], event["date"])
+        if key not in group_map:
+            group_map[key] = {
+                **event, "episode_numbers": [], "episode_count": 0,
+            }
+            grouped.append(group_map[key])
+        group = group_map[key]
+        group["episode_numbers"].append(event["episode"])
+        group["episode_count"] = len(group["episode_numbers"])
+        if event["status"] == "overdue":
+            group["status"] = "overdue"
+            group["status_label"] = "待补"
+    for group in grouped:
+        numbers = sorted(set(group["episode_numbers"]))
+        group["episode_label"] = f"第 {format_episode_numbers(numbers)} 集"
+
+    day_strip = []
+    for offset in range(-3, 4):
+        day = selected + timedelta(days=offset)
+        key = day.isoformat()
+        items = by_day.get(day.day, []) if (day.year, day.month) == (current.year, current.month) else []
+        day_strip.append({
+            "key": key,
+            "day": day.day,
+            "weekday": "一二三四五六日"[day.weekday()],
+            "is_today": day == today,
+            "selected": day == selected,
+            "count": len(items),
+            "status": worst_status(items),
+        })
     weeks = []
     for week in calendar_module.Calendar(firstweekday=0).monthdatescalendar(current.year, current.month):
         row = []
         for day in week:
             row.append({
+                "date": day.isoformat(),
                 "day": day.day,
                 "in_month": day.month == current.month,
                 "today": day == today,
+                "status": worst_status(by_day.get(day.day, [])) if day.month == current.month else "empty",
                 "events": by_day.get(day.day, []) if day.month == current.month else [],
             })
         weeks.append(row)
@@ -364,6 +435,10 @@ def _subscription_calendar(month: str) -> tuple[dict, str, str]:
         "title": current.strftime("%Y年%m月"),
         "weeks": weeks,
         "events": events,
+        "day_strip": day_strip,
+        "selected_date": selected.isoformat(),
+        "selected_label": selected.strftime("%Y年%m月%d日"),
+        "selected_events": grouped,
         "prev": prev_month,
         "next": next_month,
     }, prev_month, next_month
@@ -378,6 +453,7 @@ def subs_page(
     update: str = "all",
     q: str = "",
     month: str = "",
+    day: str = "",
 ):
     cfg = load_config()
     tab = tab if tab in ("movie", "tv", "calendar", "rules", "config") else "tv"
@@ -411,7 +487,7 @@ def subs_page(
                 if needle in (s.get("title") or "").lower()
                 or needle in str(s.get("tmdb_id") or "")
             ]
-    calendar_data = _subscription_calendar(month)[0] if tab == "calendar" else None
+    calendar_data = _subscription_calendar(month, day)[0] if tab == "calendar" else None
     return render(request, "subs.html", {
         "cfg": cfg,
         "subs": subs,
