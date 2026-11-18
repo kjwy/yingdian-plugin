@@ -74,8 +74,9 @@ def inspect_share(link: str, cookie: str | None = None) -> dict:
     resolved = resolve_share_link(link, cookie)
     share_code, pwd = parse_115_link(resolved)
     if not share_code:
-        return {"ok": False, "message": "无法解析 115 分享链接", "episodes": [], "files": []}
+        return {"ok": False, "message": "无法解析 115 分享链接", "episodes": [], "files": [], "items": []}
     filenames: list[str] = []
+    file_items: list[dict] = []
     title = ""
     queue = ["0"]
     seen = set()
@@ -98,7 +99,7 @@ def inspect_share(link: str, cookie: str | None = None) -> dict:
                     return {
                         "ok": False,
                         "message": data.get("error") or "115 分享读取失败",
-                        "episodes": [], "files": [],
+                        "episodes": [], "files": [], "items": [],
                     }
                 payload = data.get("data") or {}
                 title = title or (payload.get("shareinfo") or {}).get("share_title") or ""
@@ -109,8 +110,12 @@ def inspect_share(link: str, cookie: str | None = None) -> dict:
                         queue.append(str(item["cid"]))
                     elif name:
                         filenames.append(name)
+                        file_items.append({
+                            "name": name,
+                            "id": str(item.get("fid") or item.get("cid") or ""),
+                        })
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "message": f"读取 115 分享失败：{exc}", "episodes": [], "files": []}
+        return {"ok": False, "message": f"读取 115 分享失败：{exc}", "episodes": [], "files": [], "items": []}
 
     episodes: set[int] = set()
     for name in filenames:
@@ -121,14 +126,71 @@ def inspect_share(link: str, cookie: str | None = None) -> dict:
                 episodes.add(int(episode))
             for episode in re.findall(r"第\s*(\d{1,4})\s*集", name):
                 episodes.add(int(episode))
+    for item in file_items:
+        name = item["name"]
+        item_episodes = set()
+        for episode in re.findall(r"(?i)S\d{1,3}E(\d{1,4})", name):
+            item_episodes.add(int(episode))
+        if not re.search(r"(?i)S\d{1,3}E\d{1,4}", name):
+            item_episodes.update(
+                int(x) for x in re.findall(r"(?i)(?:^|[.\s_-])E(\d{1,4})(?:[.\s_-]|$)", name)
+            )
+            item_episodes.update(int(x) for x in re.findall(r"第\s*(\d{1,4})\s*集", name))
+        item["episodes"] = sorted(item_episodes)
     return {
         "ok": True,
         "resolved_url": resolved,
         "title": title,
         "episodes": sorted(episodes),
         "files": filenames,
+        "items": file_items,
         "message": f"读取到 {len(filenames)} 个文件、{len(episodes)} 集",
     }
+
+
+def receive_file_ids(
+    link: str,
+    file_ids: list[str],
+    cookie: str | None = None,
+    cid: str | None = None,
+) -> tuple[bool, str]:
+    """只转存 115 分享中的指定文件。"""
+    cfg = load_config()
+    cookie = (cookie if cookie is not None else cfg.get("d115_cookie", "")).strip()
+    cid = str(cid if cid is not None else (cfg.get("d115_cid") or "0")).strip() or "0"
+    file_ids = [str(x) for x in file_ids if str(x)]
+    if not cookie:
+        return False, "未配置 115 Cookie"
+    if not file_ids:
+        return False, "没有需要转存的新文件"
+    link = resolve_share_link(link, cookie)
+    share_code, pwd = parse_115_link(link)
+    if not share_code:
+        return False, "无法解析 115 分享码"
+    user_id = ""
+    match = re.search(r"(?:^|;\s*)UID=(\d+)", cookie)
+    if match:
+        user_id = match.group(1)
+    data = {
+        "share_code": share_code,
+        "receive_code": pwd,
+        "file_id": ",".join(file_ids),
+        "cid": cid,
+    }
+    if user_id:
+        data["user_id"] = user_id
+    try:
+        with httpx.Client(timeout=30, headers=_headers(cookie), follow_redirects=True) as client:
+            response = client.post(API_RECEIVE, data=data)
+            result = response.json()
+    except Exception as exc:  # noqa: BLE001
+        return False, f"选择性转存失败：{type(exc).__name__}: {exc}"
+    if result.get("state"):
+        return True, f"已转存 {len(file_ids)} 个新增文件 · cid={cid}"
+    message = result.get("error") or result.get("message") or str(result)[:160]
+    if "无需重复接收" in message or "已接收" in message:
+        return True, "新增文件已转存过"
+    return False, f"115 返回失败：{message}"
 
 
 def _headers(cookie: str) -> dict:

@@ -226,7 +226,7 @@ def _run_manual_subscription(sub: dict, cfg: dict) -> dict | None:
     url = str(sub.get("subscription_url") or "").strip()
     if not url:
         return None
-    from .transfer115 import inspect_share, receive
+    from .transfer115 import inspect_share, receive, receive_file_ids
 
     cookie = str(cfg.get("d115_cookie") or "").strip()
     inspected = inspect_share(url, cookie)
@@ -274,11 +274,24 @@ def _run_manual_subscription(sub: dict, cfg: dict) -> dict | None:
         )
         return {"title": sub.get("title") or "", "ok": False, "message": message}
 
-    ok, transfer_message = receive(
-        inspected.get("resolved_url") or url,
-        cookie,
-        cfg.get("d115_cid"),
-    )
+    selected_ids = []
+    if new_episodes:
+        for item in inspected.get("items") or []:
+            if set(item.get("episodes") or []) & new_episodes:
+                selected_ids.append(item.get("id"))
+    if selected_ids:
+        ok, transfer_message = receive_file_ids(
+            inspected.get("resolved_url") or url,
+            selected_ids,
+            cookie,
+            cfg.get("d115_cid"),
+        )
+    else:
+        ok, transfer_message = receive(
+            inspected.get("resolved_url") or url,
+            cookie,
+            cfg.get("d115_cid"),
+        )
     if not ok:
         store.update_subscription_status(int(sub["id"]), "error", transfer_message, completed=False)
         return {"title": sub.get("title") or "", "ok": False, "message": transfer_message}
